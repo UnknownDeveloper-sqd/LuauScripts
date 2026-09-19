@@ -89,7 +89,7 @@ local function claimPopups()
     end
 end
 
-local function getClosestCubePart()
+local function getClosestCubePrompt()
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
     local rootPos = char.HumanoidRootPart.Position
@@ -100,17 +100,29 @@ local function getClosestCubePart()
 
     if not cubesFolder then return nil end
 
-    local closest, minDist = nil, math.huge
-    for _, cubePart in ipairs(cubesFolder:GetChildren()) do
-        if cubePart:IsA("BasePart") then
-            local dist = (rootPos - cubePart.Position).Magnitude
-            if dist < minDist then
+    local closestPrompt, minDist = nil, math.huge
+    for _, cube in ipairs(cubesFolder:GetChildren()) do
+        local pos = cube:IsA("BasePart") and cube.Position or (cube:IsA("Model") and cube:GetPivot().Position) or Vector3.zero
+        local dist = (rootPos - pos).Magnitude
+        if dist < minDist then
+            local prompt = cube:FindFirstChildWhichIsA("ProximityPrompt", true)
+            if prompt and prompt.Enabled then
                 minDist = dist
-                closest = cubePart
+                closestPrompt = prompt
             end
         end
     end
-    return closest
+    return closestPrompt
+end
+
+local function getClickFunction()
+    local fns = filtergc("function", { Constants = {"NextClick"} }, false)
+    for _, f in ipairs(fns) do
+        if debug.info(f, "n") == "Click" then
+            return f
+        end
+    end
+    return nil
 end
 
 local Window = Rayfield:CreateWindow({
@@ -161,10 +173,6 @@ MainTab:CreateToggle({
         end
         if Value then
             cubeThread = task.spawn(function()
-                local fakeInput = {
-                    UserInputType = Enum.UserInputType.MouseButton1,
-                    UserInputState = Enum.UserInputState.Begin
-                }
                 while State.AutoCube do
                     if State.AutoTrain then
                         ensureTrainEquipped()
@@ -173,17 +181,14 @@ MainTab:CreateToggle({
                         cubesTarget = getCubesController()
                     end
 
-                    local cubePart = getClosestCubePart()
-                    if not cubePart then
+                    local prompt = getClosestCubePrompt()
+                    if not prompt then
                         task.wait(0.001)
                         continue
                     end
 
                     if cubesTarget and not cubesTarget.active then
-                        local prompt = cubePart:FindFirstChildOfClass("ProximityPrompt")
-                        if prompt then
-                            fireproximityprompt(prompt)
-                        end
+                        fireproximityprompt(prompt)
                     end
 
                     local t0 = tick()
@@ -192,14 +197,11 @@ MainTab:CreateToggle({
                     end
 
                     if State.AutoCube and cubesTarget and cubesTarget.active then
-                        local clickFn = filtergc("function", {
-                            Constants = {"LIFT", "NextClick", "MaxRate"}
-                        }, true)
-
+                        local clickFn = getClickFunction()
                         if clickFn then
                             while State.AutoCube and cubesTarget and cubesTarget.active do
                                 cubesTarget.active.NextClick = 0
-                                clickFn(fakeInput, false)
+                                clickFn(cubesTarget)
                                 task.wait()
                             end
                         end
