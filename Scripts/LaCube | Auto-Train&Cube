@@ -3,24 +3,30 @@ local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/Unkn
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
-local function getCubesController()
+local function getController(name)
     for _, t in pairs(filtergc("table", { Keys = {"replicator", "name"} }, false)) do
-        if t.name == "Cubes" then
+        if t.name == name then
             return t
         end
     end
     return nil
 end
 
-local cubesTarget = getCubesController()
+local cubesTarget = getController("Cubes")
 
 local State = {
     AutoTrain = false,
-    AutoCube = false
+    AutoCube = false,
+    EquipPriority = "Strength"
 }
 
 local trainThread = nil
 local cubeThread = nil
+
+local function safeRequire(instance)
+    local req = (type(getrenv) == "function" and getrenv().require) or _G.require or require
+    return req(instance)
+end
 
 local function ensureTrainEquipped()
     local char = LocalPlayer.Character
@@ -47,7 +53,17 @@ end
 
 local function claimPopups()
     pcall(function()
-        local pops = require(LocalPlayer.PlayerScripts.Client.Controllers.Pops)
+        local pops = getController("Pops")
+        if not pops then
+            local popsModule = LocalPlayer:FindFirstChild("PlayerScripts")
+                and LocalPlayer.PlayerScripts:FindFirstChild("Client")
+                and LocalPlayer.PlayerScripts.Client:FindFirstChild("Controllers")
+                and LocalPlayer.PlayerScripts.Client.Controllers:FindFirstChild("Pops")
+            if popsModule then
+                pops = safeRequire(popsModule)
+            end
+        end
+
         if pops and pops.live then
             for id, data in pairs(pops.live) do
                 local is20X = false
@@ -125,6 +141,86 @@ local function getClickFunction()
     return nil
 end
 
+local function equipBetterCoaches(priority)
+    local ctrl = getController("Coaches")
+    if not ctrl or not ctrl.replicator then return end
+
+    local meta = getmetatable(ctrl) and getmetatable(ctrl).__index
+    local rep = ctrl.replicator
+
+    local mod = nil
+    pcall(function()
+        local boostModule = game:GetService("ReplicatedStorage"):FindFirstChild("Modules")
+            and game:GetService("ReplicatedStorage").Modules:FindFirstChild("CoachBoosts")
+        if boostModule then
+            mod = safeRequire(boostModule)
+        end
+    end)
+    if not mod then return end
+
+    local candidates = {}
+    for _, c in ipairs(ctrl.owned or {}) do
+        local uid = c.UID or c.uid
+        local name = c.Name
+        local stats = mod.Read({ name })
+        table.insert(candidates, {
+            uid = uid,
+            name = name,
+            strength = stats.Strength or 1,
+            pushSpeed = stats.PushUp or 1,
+            walkSpeed = stats.WalkSpeed or 1
+        })
+    end
+
+    if priority == "Strength" then
+        table.sort(candidates, function(a, b) return a.strength > b.strength end)
+    elseif priority == "PushSpeed" then
+        table.sort(candidates, function(a, b) return a.pushSpeed > b.pushSpeed end)
+    elseif priority == "WalkSpeed" then
+        table.sort(candidates, function(a, b) return a.walkSpeed > b.walkSpeed end)
+    end
+
+    local bestUids = {}
+    local bestSet = {}
+    for i = 1, math.min(3, #candidates) do
+        table.insert(bestUids, candidates[i].uid)
+        bestSet[candidates[i].uid] = true
+    end
+
+    local currentEquipped = ctrl.equipped or {}
+    for _, uid in ipairs(currentEquipped) do
+        if not bestSet[uid] then
+            ctrl.selected = uid
+            if meta and meta._Unequip then
+                meta._Unequip(ctrl)
+            else
+                rep:Fire({ Function = "RequestUnequip", Args = { uid } })
+            end
+            task.wait(0.1)
+        end
+    end
+
+    for _, uid in ipairs(bestUids) do
+        local already = false
+        for _, eq in ipairs(ctrl.equipped or {}) do
+            if eq == uid then
+                already = true
+                break
+            end
+        end
+
+        if not already and #(ctrl.equipped or {}) < 3 then
+            ctrl.selected = uid
+            if meta and meta._Equip then
+                meta._Equip(ctrl)
+            else
+                rep:Fire({ Function = "RequestEquip", Args = { uid } })
+            end
+            task.wait(0.12)
+        end
+    end
+end
+
 local Window = Rayfield:CreateWindow({
     Name = "LaCube | Simple GUI",
     LoadingTitle = "LaCube | Simple GUI",
@@ -138,6 +234,7 @@ local Window = Rayfield:CreateWindow({
 })
 
 local MainTab = Window:CreateTab("Main", 4483362458)
+local MiscTab = Window:CreateTab("Misc", 4483362458)
 
 MainTab:CreateToggle({
     Name = "Auto-Train",
@@ -178,7 +275,7 @@ MainTab:CreateToggle({
                         ensureTrainEquipped()
                     end
                     if not cubesTarget then
-                        cubesTarget = getCubesController()
+                        cubesTarget = getController("Cubes")
                     end
 
                     local prompt = getClosestCubePrompt()
@@ -214,5 +311,23 @@ MainTab:CreateToggle({
                 end
             end)
         end
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Equip Better",
+    Callback = function()
+        equipBetterCoaches(State.EquipPriority)
+    end
+})
+
+MiscTab:CreateDropdown({
+    Name = "Priority",
+    Options = {"Strength", "PushSpeed", "WalkSpeed"},
+    CurrentOption = {"Strength"},
+    MultipleOptions = false,
+    Flag = "EquipPriorityFlag",
+    Callback = function(Option)
+        State.EquipPriority = type(Option) == "table" and Option[1] or Option
     end
 })
