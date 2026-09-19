@@ -1,7 +1,12 @@
 local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/refs/heads/main/Rayfield/CustomRayfield.luau"))()
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
+
+local bridgenet2 = require(ReplicatedStorage.Packages.bridgenet2)
+local userId = tostring(LocalPlayer.UserId):gsub("-", "")
+local trainBridge = bridgenet2.ReferenceBridge(string.format("%s_%s", userId, "Training"))
 
 local function getController(name)
     for _, t in pairs(filtergc("table", { Keys = {"replicator", "name"} }, false)) do
@@ -17,6 +22,7 @@ local cubesTarget = getController("Cubes")
 local State = {
     AutoTrain = false,
     AutoCube = false,
+    TrainDelay = 0.08,
     EquipPriority = "Strength"
 }
 
@@ -120,7 +126,7 @@ local function getClosestCubePrompt()
     for _, cube in ipairs(cubesFolder:GetChildren()) do
         local pos = cube:IsA("BasePart") and cube.Position or (cube:IsA("Model") and cube:GetPivot().Position) or Vector3.zero
         local dist = (rootPos - pos).Magnitude
-        if dist < minDist then
+        if dist < minDist and dist <= 30 then
             local prompt = cube:FindFirstChildWhichIsA("ProximityPrompt", true)
             if prompt and prompt.Enabled then
                 minDist = dist
@@ -250,8 +256,12 @@ MainTab:CreateToggle({
             trainThread = task.spawn(function()
                 while State.AutoTrain do
                     ensureTrainEquipped()
+                    trainBridge:Fire({
+                        Function = "CompletePushup",
+                        Args = { 1 }
+                    })
                     claimPopups()
-                    task.wait(0.001)
+                    task.wait(State.TrainDelay)
                 end
             end)
         end
