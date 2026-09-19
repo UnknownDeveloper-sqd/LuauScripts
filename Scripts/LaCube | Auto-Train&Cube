@@ -1,0 +1,216 @@
+local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/refs/heads/main/Rayfield/CustomRayfield.luau"))()
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local function getCubesController()
+    for _, t in pairs(filtergc("table", { Keys = {"replicator", "name"} }, false)) do
+        if t.name == "Cubes" then
+            return t
+        end
+    end
+    return nil
+end
+
+local cubesTarget = getCubesController()
+
+local State = {
+    AutoTrain = false,
+    AutoCube = false
+}
+
+local trainThread = nil
+local cubeThread = nil
+
+local function ensureTrainEquipped()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    for _, item in ipairs(char:GetChildren()) do
+        if item:IsA("Tool") and (item.Name == "Train" or item:GetAttribute("TrainTool") or item:GetAttribute("is_train_tool")) then
+            return
+        end
+    end
+
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") and (item.Name == "Train" or item:GetAttribute("TrainTool") or item:GetAttribute("is_train_tool")) then
+                humanoid:EquipTool(item)
+                return
+            end
+        end
+    end
+end
+
+local function claimPopups()
+    pcall(function()
+        local pops = require(LocalPlayer.PlayerScripts.Client.Controllers.Pops)
+        if pops and pops.live then
+            for id, data in pairs(pops.live) do
+                local is20X = false
+                if data.gui then
+                    local t = data.gui:FindFirstChild("Title", true)
+                    if t and (t.Text:find("20X") or t.Text:find("20x") or t.Text:find("20")) then
+                        is20X = true
+                    end
+                end
+                if not (is20X or data.bought) then
+                    pops:_Claim(id)
+                end
+            end
+        end
+    end)
+
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    if gui then
+        for _, containerName in ipairs({"Screen", "Overlay"}) do
+            local parent = gui:FindFirstChild(containerName)
+            if parent then
+                for _, obj in ipairs(parent:GetChildren()) do
+                    if obj.Name == "POPUP" or (obj:IsA("GuiButton") and obj.Visible) then
+                        local textLabel = obj:FindFirstChild("Title", true) or obj:FindFirstChildOfClass("TextLabel")
+                        local txt = textLabel and textLabel.Text or ""
+                        if (txt:find("X") or txt:find("x")) and not (txt:find("20X") or txt:find("20x") or txt:find("20")) then
+                            if firesignal then
+                                pcall(firesignal, obj.Activated)
+                            elseif getconnections then
+                                for _, conn in ipairs(getconnections(obj.Activated)) do
+                                    conn:Fire()
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function getClosestCubePart()
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+    local rootPos = char.HumanoidRootPart.Position
+
+    local cubesFolder = workspace:FindFirstChild("World") 
+        and workspace.World:FindFirstChild("Shared") 
+        and workspace.World.Shared:FindFirstChild("Cubes")
+
+    if not cubesFolder then return nil end
+
+    local closest, minDist = nil, math.huge
+    for _, cubePart in ipairs(cubesFolder:GetChildren()) do
+        if cubePart:IsA("BasePart") then
+            local dist = (rootPos - cubePart.Position).Magnitude
+            if dist < minDist then
+                minDist = dist
+                closest = cubePart
+            end
+        end
+    end
+    return closest
+end
+
+local Window = Rayfield:CreateWindow({
+    Name = "LaCube | Simple GUI",
+    LoadingTitle = "LaCube | Simple GUI",
+    LoadingSubtitle = "By: UnknownSquad",
+    Theme = "Amethyst",
+    Width = 460,
+    Height = 360,
+    Font = "Code",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+local MainTab = Window:CreateTab("Main", 4483362458)
+
+MainTab:CreateToggle({
+    Name = "Auto-Train",
+    CurrentValue = false,
+    Flag = "AutoTrainFlag",
+    Callback = function(Value)
+        State.AutoTrain = Value
+        if trainThread then
+            pcall(task.cancel, trainThread)
+            trainThread = nil
+        end
+        if Value then
+            trainThread = task.spawn(function()
+                while State.AutoTrain do
+                    ensureTrainEquipped()
+                    claimPopups()
+                    task.wait(0.001)
+                end
+            end)
+        end
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Auto-Cube",
+    CurrentValue = false,
+    Flag = "AutoCubeFlag",
+    Callback = function(Value)
+        State.AutoCube = Value
+        if cubeThread then
+            pcall(task.cancel, cubeThread)
+            cubeThread = nil
+        end
+        if Value then
+            cubeThread = task.spawn(function()
+                local fakeInput = {
+                    UserInputType = Enum.UserInputType.MouseButton1,
+                    UserInputState = Enum.UserInputState.Begin
+                }
+                while State.AutoCube do
+                    if State.AutoTrain then
+                        ensureTrainEquipped()
+                    end
+                    if not cubesTarget then
+                        cubesTarget = getCubesController()
+                    end
+
+                    local cubePart = getClosestCubePart()
+                    if not cubePart then
+                        task.wait(0.001)
+                        continue
+                    end
+
+                    if cubesTarget and not cubesTarget.active then
+                        local prompt = cubePart:FindFirstChildOfClass("ProximityPrompt")
+                        if prompt then
+                            fireproximityprompt(prompt)
+                        end
+                    end
+
+                    local t0 = tick()
+                    while State.AutoCube and cubesTarget and not cubesTarget.active and tick() - t0 < 0.2 do
+                        task.wait()
+                    end
+
+                    if State.AutoCube and cubesTarget and cubesTarget.active then
+                        local clickFn = filtergc("function", {
+                            Constants = {"LIFT", "NextClick", "MaxRate"}
+                        }, true)
+
+                        if clickFn then
+                            while State.AutoCube and cubesTarget and cubesTarget.active do
+                                cubesTarget.active.NextClick = 0
+                                clickFn(fakeInput, false)
+                                task.wait()
+                            end
+                        end
+
+                        if State.AutoTrain then
+                            ensureTrainEquipped()
+                        end
+                    end
+                    task.wait(0.001)
+                end
+            end)
+        end
+    end
+})
