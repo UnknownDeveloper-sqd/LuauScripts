@@ -1,0 +1,919 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterGui = game:GetService("StarterGui")
+local LocalPlayer = Players.LocalPlayer
+
+pcall(function()
+    for _, g in ipairs(game:GetService("CoreGui"):GetChildren()) do
+        if g.Name:find("Rayfield") or (g:IsA("ScreenGui") and g:FindFirstChild("Main") and g.Main:FindFirstChild("Topbar")) then
+            g:Destroy()
+        end
+    end
+end)
+
+local ToolGiverRemotes = ReplicatedStorage:WaitForChild("ToolGiverRemotes")
+local GetToolList = ToolGiverRemotes:WaitForChild("GetToolList")
+local GiveTool = ToolGiverRemotes:WaitForChild("GiveTool")
+local ClearTools = ToolGiverRemotes:WaitForChild("ClearTools")
+
+local rawToolData = GetToolList:InvokeServer()
+local allToolNames = {}
+for _, t in ipairs(rawToolData) do
+    if t and t.Name then
+        table.insert(allToolNames, t.Name)
+    end
+end
+table.sort(allToolNames)
+
+local function getPlayerNames()
+    local names = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        table.insert(names, p.Name)
+    end
+    table.sort(names)
+    return names
+end
+
+local playerNames = getPlayerNames()
+
+local function parseOptionValue(Option)
+    if type(Option) == "table" then
+        return Option[1] or ""
+    elseif type(Option) == "string" then
+        return Option
+    end
+    return ""
+end
+
+local selectedGivePlayer = LocalPlayer.Name
+local selectedRemovePlayer = LocalPlayer.Name
+local selectedUsePlayer = LocalPlayer.Name
+local selectedSpamPlayer = LocalPlayer.Name
+
+local selectedGiveTool = allToolNames[1] or ""
+local selectedRemoveTool = ""
+local selectedUseTool = ""
+local selectedSpamTool = allToolNames[1] or ""
+
+local spamCount = 10
+local autoClearCustomInventoryUI = false
+
+local blacklistEnabled = false
+local blacklistSelectedTools = {}
+local blacklistWhiteListPlayers = {}
+
+local filteredGiveTools = {}
+local filteredUseTools = {}
+local filteredSpamTools = {}
+local filteredBlacklistTools = {}
+
+for _, name in ipairs(allToolNames) do
+    table.insert(filteredGiveTools, name)
+    table.insert(filteredUseTools, name)
+    table.insert(filteredSpamTools, name)
+    table.insert(filteredBlacklistTools, name)
+end
+
+local currentTargetToolObjects = {}
+local currentUseToolObjects = {}
+
+local function getTargetPlayerTools(playerName)
+    currentTargetToolObjects = {}
+    if not playerName or playerName == "" then
+        return { "No tools in inventory" }
+    end
+
+    local target = Players:FindFirstChild(playerName)
+    if not target then
+        return { "No tools in inventory" }
+    end
+
+    local rawTools = {}
+    local nameCounts = {}
+
+    local function collectFrom(container)
+        if container then
+            for _, item in ipairs(container:GetChildren()) do
+                if item:IsA("Tool") then
+                    table.insert(rawTools, item)
+                    nameCounts[item.Name] = (nameCounts[item.Name] or 0) + 1
+                end
+            end
+        end
+    end
+
+    collectFrom(target:FindFirstChildOfClass("Backpack") or target:FindFirstChild("Backpack"))
+    collectFrom(target.Character)
+
+    if #rawTools == 0 then
+        return { "No tools in inventory" }
+    end
+
+    local currentNameIndex = {}
+    local displayList = {}
+
+    for _, tool in ipairs(rawTools) do
+        local totalCount = nameCounts[tool.Name] or 1
+        local displayName = tool.Name
+        if totalCount > 1 then
+            currentNameIndex[tool.Name] = (currentNameIndex[tool.Name] or 0) + 1
+            displayName = string.format("%s #%d", tool.Name, currentNameIndex[tool.Name])
+        end
+        table.insert(displayList, displayName)
+        currentTargetToolObjects[displayName] = tool
+    end
+
+    table.sort(displayList)
+    return displayList
+end
+
+local function getTargetPlayerToolsForUse(playerName)
+    currentUseToolObjects = {}
+    if not playerName or playerName == "" then
+        return { "No tools in inventory" }
+    end
+
+    local target = Players:FindFirstChild(playerName)
+    if not target then
+        return { "No tools in inventory" }
+    end
+
+    local rawTools = {}
+    local nameCounts = {}
+
+    local function collectFrom(container)
+        if container then
+            for _, item in ipairs(container:GetChildren()) do
+                if item:IsA("Tool") then
+                    table.insert(rawTools, item)
+                    nameCounts[item.Name] = (nameCounts[item.Name] or 0) + 1
+                end
+            end
+        end
+    end
+
+    collectFrom(target:FindFirstChildOfClass("Backpack") or target:FindFirstChild("Backpack"))
+    collectFrom(target.Character)
+
+    if #rawTools == 0 then
+        return { "No tools in inventory" }
+    end
+
+    local currentNameIndex = {}
+    local displayList = {}
+
+    for _, tool in ipairs(rawTools) do
+        local totalCount = nameCounts[tool.Name] or 1
+        local displayName = tool.Name
+        if totalCount > 1 then
+            currentNameIndex[tool.Name] = (currentNameIndex[tool.Name] or 0) + 1
+            displayName = string.format("%s #%d", tool.Name, currentNameIndex[tool.Name])
+        end
+        table.insert(displayList, displayName)
+        currentUseToolObjects[displayName] = tool
+    end
+
+    table.sort(displayList)
+    return displayList
+end
+
+local function destroyCustomInventoryUI()
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if playerGui then
+        for _, name in ipairs({ "HotBar", "ToolGiverGui" }) do
+            local item = playerGui:FindFirstChild(name)
+            if item then
+                pcall(function()
+                    item:Destroy()
+                end)
+            end
+        end
+    end
+    pcall(function()
+        StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true)
+    end)
+end
+
+local function activateToolInstance(toolObj, targetPlayer)
+    if not toolObj or not toolObj.Parent then return end
+
+    targetPlayer = targetPlayer or LocalPlayer
+    local isLocal = (targetPlayer == LocalPlayer)
+    local targetChar = targetPlayer and targetPlayer.Character
+    local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+    local targetHum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
+    local targetPos = targetRoot and targetRoot.Position or Vector3.new()
+    local targetCFrame = targetRoot and targetRoot.CFrame or CFrame.new()
+
+    if isLocal then
+        local char = LocalPlayer.Character
+        if char and toolObj.Parent ~= char then
+            toolObj.Parent = char
+        end
+        pcall(function()
+            toolObj:Activate()
+        end)
+    end
+
+    for _, child in ipairs(toolObj:GetDescendants()) do
+        if child:IsA("RemoteEvent") then
+            task.spawn(function()
+                pcall(function() child:FireServer() end)
+                pcall(function() child:FireServer(targetPlayer) end)
+                pcall(function() child:FireServer(targetChar) end)
+                pcall(function() child:FireServer(targetPos) end)
+                pcall(function() child:FireServer(targetCFrame) end)
+                pcall(function() child:FireServer(targetHum) end)
+                pcall(function() child:FireServer(targetPlayer.Name) end)
+                pcall(function() child:FireServer(targetChar, targetPos) end)
+                pcall(function() child:FireServer(targetCFrame, targetChar) end)
+            end)
+        elseif child:IsA("RemoteFunction") then
+            task.spawn(function()
+                pcall(function() child:InvokeServer() end)
+                pcall(function() child:InvokeServer(targetPlayer) end)
+                pcall(function() child:InvokeServer(targetChar) end)
+            end)
+        end
+    end
+end
+
+local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/refs/heads/main/Rayfield/CustomRayfield.luau"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "RTools | Tool Manager",
+    LoadingTitle = "RTools | Tool Manager",
+    LoadingSubtitle = "By: UnknownSquad",
+    Theme = "Amethyst",
+    Width = 460,
+    Height = 360,
+    Font = "Code",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+local GiveTab = Window:CreateTab("GiveTool", 4483362458)
+GiveTab:CreateSection("Target Player")
+
+local GivePlayerDropdown = GiveTab:CreateDropdown({
+    Name = "Select Target Player",
+    Options = playerNames,
+    CurrentOption = { selectedGivePlayer },
+    Flag = "GiveTargetPlayer",
+    Callback = function(Option)
+        local val = parseOptionValue(Option)
+        if val ~= "" then
+            selectedGivePlayer = val
+        end
+    end
+})
+
+GiveTab:CreateSection("Tools")
+local GiveToolDropdown
+
+local function filterGiveTools(query)
+    query = string.lower(query or "")
+    filteredGiveTools = {}
+    if query == "" then
+        for _, name in ipairs(allToolNames) do
+            table.insert(filteredGiveTools, name)
+        end
+    else
+        for _, name in ipairs(allToolNames) do
+            if string.find(string.lower(name), query, 1, true) then
+                table.insert(filteredGiveTools, name)
+            end
+        end
+    end
+
+    if #filteredGiveTools == 0 then
+        table.insert(filteredGiveTools, "No matching tools")
+    end
+
+    if GiveToolDropdown then
+        if GiveToolDropdown.Refresh then
+            GiveToolDropdown:Refresh(filteredGiveTools, false)
+        end
+        if GiveToolDropdown.Set and filteredGiveTools[1] then
+            pcall(function()
+                GiveToolDropdown:Set({ filteredGiveTools[1] })
+            end)
+            selectedGiveTool = filteredGiveTools[1]
+        end
+    end
+end
+
+GiveTab:CreateInput({
+    Name = "Search Tool",
+    PlaceholderText = "Type tool name to filter...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text)
+        filterGiveTools(Text)
+    end
+})
+
+GiveToolDropdown = GiveTab:CreateDropdown({
+    Name = "Select Tool",
+    Options = filteredGiveTools,
+    CurrentOption = { selectedGiveTool },
+    Flag = "GiveSelectedTool",
+    Callback = function(Option)
+        local val = parseOptionValue(Option)
+        if val ~= "" and val ~= "No matching tools" then
+            selectedGiveTool = val
+        end
+    end
+})
+
+GiveTab:CreateButton({
+    Name = "Give Tool",
+    Callback = function()
+        if selectedGivePlayer ~= "" and selectedGiveTool ~= "" and selectedGiveTool ~= "No matching tools" then
+            GiveTool:FireServer(selectedGivePlayer, selectedGiveTool)
+        end
+    end
+})
+
+GiveTab:CreateButton({
+    Name = "Give All",
+    Callback = function()
+        if selectedGivePlayer ~= "" then
+            for _, tName in ipairs(allToolNames) do
+                GiveTool:FireServer(selectedGivePlayer, tName)
+            end
+        end
+    end
+})
+
+local RemoveTab = Window:CreateTab("RemoveTool", 4483362458)
+RemoveTab:CreateSection("Target Player")
+
+local RemoveToolDropdown
+local initialRemoveTools = getTargetPlayerTools(selectedRemovePlayer)
+selectedRemoveTool = initialRemoveTools[1] or ""
+
+local function refreshRemoveToolsDropdown()
+    local updatedTools = getTargetPlayerTools(selectedRemovePlayer)
+    if RemoveToolDropdown then
+        if RemoveToolDropdown.Refresh then
+            RemoveToolDropdown:Refresh(updatedTools, false)
+        end
+        if RemoveToolDropdown.Set and updatedTools[1] then
+            pcall(function()
+                RemoveToolDropdown:Set({ updatedTools[1] })
+            end)
+            selectedRemoveTool = updatedTools[1] or ""
+        end
+    end
+end
+
+local RemovePlayerDropdown = RemoveTab:CreateDropdown({
+    Name = "Select Target Player",
+    Options = playerNames,
+    CurrentOption = { selectedRemovePlayer },
+    Flag = "RemoveTargetPlayer",
+    Callback = function(Option)
+        local val = parseOptionValue(Option)
+        if val ~= "" then
+            selectedRemovePlayer = val
+            refreshRemoveToolsDropdown()
+        end
+    end
+})
+
+RemoveTab:CreateSection("Tools")
+
+RemoveToolDropdown = RemoveTab:CreateDropdown({
+    Name = "Select Tool",
+    Options = initialRemoveTools,
+    CurrentOption = { selectedRemoveTool },
+    Flag = "RemoveSelectedTool",
+    Callback = function(Option)
+        local val = parseOptionValue(Option)
+        if val ~= "" and val ~= "No tools in inventory" then
+            selectedRemoveTool = val
+        end
+    end
+})
+
+RemoveTab:CreateButton({
+    Name = "Remove Tool",
+    Callback = function()
+        if not selectedRemoveTool or selectedRemoveTool == "" or selectedRemoveTool == "No tools in inventory" then
+            return
+        end
+
+        local baseName = string.gsub(selectedRemoveTool, " #%d+$", "")
+        if selectedRemovePlayer == LocalPlayer.Name then
+            local targetTool = currentTargetToolObjects[selectedRemoveTool]
+            if targetTool and targetTool.Parent then
+                targetTool:Destroy()
+            else
+                for _, parent in ipairs({ LocalPlayer:FindFirstChildOfClass("Backpack"), LocalPlayer.Character }) do
+                    if parent then
+                        local item = parent:FindFirstChild(baseName)
+                        if item and item:IsA("Tool") then
+                            item:Destroy()
+                            break
+                        end
+                    end
+                end
+            end
+        else
+            ClearTools:FireServer(selectedRemovePlayer)
+        end
+
+        refreshRemoveToolsDropdown()
+    end
+})
+
+RemoveTab:CreateButton({
+    Name = "Remove All",
+    Callback = function()
+        if selectedRemovePlayer and selectedRemovePlayer ~= "" then
+            ClearTools:FireServer(selectedRemovePlayer)
+        end
+
+        task.wait(0.25)
+        refreshRemoveToolsDropdown()
+    end
+})
+
+RemoveTab:CreateButton({
+    Name = "Remove Everyone",
+    Callback = function()
+        for _, player in ipairs(Players:GetPlayers()) do
+            ClearTools:FireServer(player.Name)
+        end
+
+        task.wait(0.25)
+        refreshRemoveToolsDropdown()
+    end
+})
+
+local UseTab = Window:CreateTab("UseTool", 4483362458)
+UseTab:CreateSection("Target Player")
+
+local UsePlayerDropdown
+local UseToolDropdown
+
+local initialUseTools = getTargetPlayerToolsForUse(selectedUsePlayer)
+selectedUseTool = initialUseTools[1] or ""
+filteredUseTools = initialUseTools
+
+local function refreshUseToolsDropdown(query)
+    query = string.lower(query or "")
+    local playerTools = getTargetPlayerToolsForUse(selectedUsePlayer)
+    filteredUseTools = {}
+
+    if query == "" then
+        filteredUseTools = playerTools
+    else
+        for _, name in ipairs(playerTools) do
+            if string.find(string.lower(name), query, 1, true) then
+                table.insert(filteredUseTools, name)
+            end
+        end
+    end
+
+    if #filteredUseTools == 0 then
+        table.insert(filteredUseTools, "No matching tools")
+    end
+
+    if UseToolDropdown then
+        if UseToolDropdown.Refresh then
+            UseToolDropdown:Refresh(filteredUseTools, false)
+        end
+        if UseToolDropdown.Set and filteredUseTools[1] then
+            pcall(function()
+                UseToolDropdown:Set({ filteredUseTools[1] })
+            end)
+            selectedUseTool = filteredUseTools[1]
+        end
+    end
+end
+
+UsePlayerDropdown = UseTab:CreateDropdown({
+    Name = "Select Target Player",
+    Options = playerNames,
+    CurrentOption = { selectedUsePlayer },
+    Flag = "UseTargetPlayer",
+    Callback = function(Option)
+        local val = parseOptionValue(Option)
+        if val ~= "" then
+            selectedUsePlayer = val
+            refreshUseToolsDropdown("")
+        end
+    end
+})
+
+UseTab:CreateSection("Tools")
+
+UseTab:CreateInput({
+    Name = "Search Tool",
+    PlaceholderText = "Type tool name to filter...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text)
+        refreshUseToolsDropdown(Text)
+    end
+})
+
+UseToolDropdown = UseTab:CreateDropdown({
+    Name = "Select Tool",
+    Options = initialUseTools,
+    CurrentOption = { selectedUseTool },
+    Flag = "UseSelectedTool",
+    Callback = function(Option)
+        local val = parseOptionValue(Option)
+        if val ~= "" and val ~= "No matching tools" and val ~= "No tools in inventory" then
+            selectedUseTool = val
+        end
+    end
+})
+
+UseTab:CreateButton({
+    Name = "Use Tool",
+    Callback = function()
+        if not selectedUseTool or selectedUseTool == "" or selectedUseTool == "No matching tools" or selectedUseTool == "No tools in inventory" then
+            return
+        end
+
+        local targetP = Players:FindFirstChild(selectedUsePlayer) or LocalPlayer
+        local toolObj = currentUseToolObjects[selectedUseTool]
+        if toolObj and toolObj.Parent then
+            activateToolInstance(toolObj, targetP)
+        else
+            local baseName = string.gsub(selectedUseTool, " #%d+$", "")
+            local targetChar = targetP and targetP.Character
+            local bp = targetP and (targetP:FindFirstChildOfClass("Backpack") or targetP:FindFirstChild("Backpack"))
+            local item = (bp and bp:FindFirstChild(baseName)) or (targetChar and targetChar:FindFirstChild(baseName))
+            if item and item:IsA("Tool") then
+                activateToolInstance(item, targetP)
+            end
+        end
+    end
+})
+
+UseTab:CreateButton({
+    Name = "Use All",
+    Callback = function()
+        local targetP = Players:FindFirstChild(selectedUsePlayer) or LocalPlayer
+        local playerTools = getTargetPlayerToolsForUse(selectedUsePlayer)
+        for _, displayName in ipairs(playerTools) do
+            if displayName ~= "No tools in inventory" then
+                local toolObj = currentUseToolObjects[displayName]
+                if toolObj and toolObj.Parent then
+                    task.spawn(function()
+                        activateToolInstance(toolObj, targetP)
+                    end)
+                end
+            end
+        end
+    end
+})
+
+local SpamTab = Window:CreateTab("SpamTool", 4483362458)
+SpamTab:CreateSection("Target Player")
+
+local SpamPlayerDropdown = SpamTab:CreateDropdown({
+    Name = "Select Target Player",
+    Options = playerNames,
+    CurrentOption = { selectedSpamPlayer },
+    Flag = "SpamTargetPlayer",
+    Callback = function(Option)
+        local val = parseOptionValue(Option)
+        if val ~= "" then
+            selectedSpamPlayer = val
+        end
+    end
+})
+
+SpamTab:CreateSection("Tools")
+
+local SpamToolDropdown
+
+local function filterSpamTools(query)
+    query = string.lower(query or "")
+    filteredSpamTools = {}
+    if query == "" then
+        for _, name in ipairs(allToolNames) do
+            table.insert(filteredSpamTools, name)
+        end
+    else
+        for _, name in ipairs(allToolNames) do
+            if string.find(string.lower(name), query, 1, true) then
+                table.insert(filteredSpamTools, name)
+            end
+        end
+    end
+
+    if #filteredSpamTools == 0 then
+        table.insert(filteredSpamTools, "No matching tools")
+    end
+
+    if SpamToolDropdown then
+        if SpamToolDropdown.Refresh then
+            SpamToolDropdown:Refresh(filteredSpamTools, false)
+        end
+        if SpamToolDropdown.Set and filteredSpamTools[1] then
+            pcall(function()
+                SpamToolDropdown:Set({ filteredSpamTools[1] })
+            end)
+            selectedSpamTool = filteredSpamTools[1]
+        end
+    end
+end
+
+SpamTab:CreateInput({
+    Name = "Search Tool",
+    PlaceholderText = "Type tool name to filter...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text)
+        filterSpamTools(Text)
+    end
+})
+
+SpamToolDropdown = SpamTab:CreateDropdown({
+    Name = "Select Tool",
+    Options = filteredSpamTools,
+    CurrentOption = { selectedSpamTool },
+    Flag = "SpamSelectedTool",
+    Callback = function(Option)
+        local val = parseOptionValue(Option)
+        if val ~= "" and val ~= "No matching tools" then
+            selectedSpamTool = val
+        end
+    end
+})
+
+SpamTab:CreateSlider({
+    Name = "Amount",
+    Range = {1, 100},
+    Increment = 1,
+    CurrentValue = spamCount,
+    Flag = "SpamToolAmount",
+    Callback = function(Value)
+        spamCount = math.clamp(tonumber(Value) or 10, 1, 100)
+    end
+})
+
+SpamTab:CreateSection("Action")
+
+SpamTab:CreateButton({
+    Name = "Execute",
+    Callback = function()
+        if selectedSpamPlayer == "" or selectedSpamTool == "" or selectedSpamTool == "No matching tools" then
+            return
+        end
+
+        local targetPlayer = Players:FindFirstChild(selectedSpamPlayer) or LocalPlayer
+        local isLocal = (targetPlayer == LocalPlayer)
+        local targetName = selectedSpamTool
+
+        for i = 1, spamCount do
+            task.spawn(function()
+                GiveTool:FireServer(selectedSpamPlayer, targetName)
+            end)
+        end
+
+        task.spawn(function()
+            local triggered = {}
+            local deadline = tick() + 3.5
+
+            while tick() < deadline do
+                for _, loc in ipairs({ targetPlayer:FindFirstChildOfClass("Backpack"), targetPlayer.Character }) do
+                    if loc then
+                        for _, item in ipairs(loc:GetChildren()) do
+                            if item:IsA("Tool") and item.Name == targetName and not triggered[item] then
+                                triggered[item] = true
+
+                                task.spawn(function()
+                                    if isLocal and targetPlayer.Character then
+                                        item.Parent = targetPlayer.Character
+                                    end
+
+                                    activateToolInstance(item, targetPlayer)
+
+                                    task.wait(0.1)
+                                    if isLocal then
+                                        pcall(function() item:Destroy() end)
+                                    else
+                                        ClearTools:FireServer(targetPlayer.Name)
+                                    end
+                                end)
+                            end
+                        end
+                    end
+                end
+
+                task.wait(0.02)
+            end
+
+            task.wait(0.1)
+            if isLocal then
+                for _, loc in ipairs({ targetPlayer:FindFirstChildOfClass("Backpack"), targetPlayer.Character }) do
+                    if loc then
+                        for _, item in ipairs(loc:GetChildren()) do
+                            if item:IsA("Tool") and item.Name == targetName then
+                                pcall(function() item:Destroy() end)
+                            end
+                        end
+                    end
+                end
+            else
+                ClearTools:FireServer(targetPlayer.Name)
+            end
+        end)
+    end
+})
+
+local BlackListTab = Window:CreateTab("BlackListTool", 4483362458)
+BlackListTab:CreateSection("Blacklist")
+
+BlackListTab:CreateToggle({
+    Name = "Blacklist",
+    CurrentValue = false,
+    Flag = "BlacklistToggle",
+    Callback = function(Value)
+        blacklistEnabled = Value
+    end
+})
+
+BlackListTab:CreateSection("Tools")
+
+local function buildBlacklistToolOptions()
+    local opts = { "[ALL TOOLS]" }
+    for _, name in ipairs(allToolNames) do
+        table.insert(opts, name)
+    end
+    return opts
+end
+
+local BlacklistToolDropdown
+
+local function filterBlacklistTools(query)
+    query = string.lower(query or "")
+    filteredBlacklistTools = {}
+    table.insert(filteredBlacklistTools, "[ALL TOOLS]")
+    
+    if query == "" then
+        for _, name in ipairs(allToolNames) do
+            table.insert(filteredBlacklistTools, name)
+        end
+    else
+        for _, name in ipairs(allToolNames) do
+            if string.find(string.lower(name), query, 1, true) then
+                table.insert(filteredBlacklistTools, name)
+            end
+        end
+    end
+
+    if BlacklistToolDropdown and BlacklistToolDropdown.Refresh then
+        BlacklistToolDropdown:Refresh(filteredBlacklistTools, false)
+    end
+end
+
+BlackListTab:CreateInput({
+    Name = "Search Tools",
+    PlaceholderText = "Type tool name to filter...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text)
+        filterBlacklistTools(Text)
+    end
+})
+
+BlacklistToolDropdown = BlackListTab:CreateDropdown({
+    Name = "Select Tools",
+    Options = buildBlacklistToolOptions(),
+    CurrentOption = {},
+    MultipleOptions = true,
+    Flag = "BlacklistToolsMulti",
+    Callback = function(Options)
+        table.clear(blacklistSelectedTools)
+        local opts = type(Options) == "table" and Options or { Options }
+        for _, opt in ipairs(opts) do
+            blacklistSelectedTools[opt] = true
+        end
+    end
+})
+
+BlackListTab:CreateSection("WhiteList")
+
+local BlacklistWhiteListDropdown = BlackListTab:CreateDropdown({
+    Name = "WhiteList Players",
+    Options = playerNames,
+    CurrentOption = {},
+    MultipleOptions = true,
+    Flag = "BlacklistWhiteListMulti",
+    Callback = function(Options)
+        table.clear(blacklistWhiteListPlayers)
+        local opts = type(Options) == "table" and Options or { Options }
+        for _, opt in ipairs(opts) do
+            blacklistWhiteListPlayers[opt] = true
+        end
+    end
+})
+
+task.spawn(function()
+    while true do
+        if blacklistEnabled then
+            local isAll = blacklistSelectedTools["[ALL TOOLS]"]
+            local hasAnySpecific = false
+            for k, v in pairs(blacklistSelectedTools) do
+                if v and k ~= "[ALL TOOLS]" then
+                    hasAnySpecific = true
+                    break
+                end
+            end
+
+            for _, player in ipairs(Players:GetPlayers()) do
+                if not blacklistWhiteListPlayers[player.Name] then
+                    if isAll then
+                        ClearTools:FireServer(player.Name)
+                    end
+
+                    local containers = {}
+                    if player == LocalPlayer then
+                        local bp = player:FindFirstChildOfClass("Backpack") or player:FindFirstChild("Backpack")
+                        if bp then table.insert(containers, bp) end
+                    end
+                    if player.Character then
+                        table.insert(containers, player.Character)
+                    end
+
+                    local shouldClearServer = false
+
+                    for _, container in ipairs(containers) do
+                        for _, item in ipairs(container:GetChildren()) do
+                            if item:IsA("Tool") then
+                                if isAll or blacklistSelectedTools[item.Name] then
+                                    shouldClearServer = true
+                                    pcall(function() item:Destroy() end)
+                                end
+                            end
+                        end
+                    end
+
+                    if shouldClearServer and not isAll then
+                        ClearTools:FireServer(player.Name)
+                    end
+                end
+            end
+        end
+        task.wait(0.08)
+    end
+end)
+
+local SettingsTab = Window:CreateTab("Settings", 4483362458)
+SettingsTab:CreateSection("Custom Inventory")
+
+SettingsTab:CreateToggle({
+    Name = "ClearCustomInventory",
+    CurrentValue = false,
+    Flag = "ClearCustomInventoryToggle",
+    Callback = function(Value)
+        autoClearCustomInventoryUI = Value
+        if Value then
+            destroyCustomInventoryUI()
+        end
+    end
+})
+
+task.spawn(function()
+    while true do
+        if autoClearCustomInventoryUI then
+            destroyCustomInventoryUI()
+        end
+        task.wait(0.1)
+    end
+end)
+
+local function updateAllPlayerDropdowns()
+    local updatedNames = getPlayerNames()
+    if GivePlayerDropdown and GivePlayerDropdown.Refresh then pcall(function() GivePlayerDropdown:Refresh(updatedNames, true) end) end
+    if RemovePlayerDropdown and RemovePlayerDropdown.Refresh then pcall(function() RemovePlayerDropdown:Refresh(updatedNames, true) end) end
+    if UsePlayerDropdown and UsePlayerDropdown.Refresh then pcall(function() UsePlayerDropdown:Refresh(updatedNames, true) end) end
+    if SpamPlayerDropdown and SpamPlayerDropdown.Refresh then pcall(function() SpamPlayerDropdown:Refresh(updatedNames, true) end) end
+    if BlacklistWhiteListDropdown and BlacklistWhiteListDropdown.Refresh then
+        local currentSelected = {}
+        for name, state in pairs(blacklistWhiteListPlayers) do
+            if state then table.insert(currentSelected, name) end
+        end
+        pcall(function()
+            BlacklistWhiteListDropdown:Refresh(updatedNames, false)
+            BlacklistWhiteListDropdown:Set(currentSelected)
+        end)
+    end
+    refreshRemoveToolsDropdown()
+    refreshUseToolsDropdown("")
+end
+
+Players.PlayerAdded:Connect(function()
+    task.wait(0.5)
+    updateAllPlayerDropdowns()
+end)
+
+Players.PlayerRemoving:Connect(function()
+    task.wait(0.5)
+    updateAllPlayerDropdowns()
+end)
