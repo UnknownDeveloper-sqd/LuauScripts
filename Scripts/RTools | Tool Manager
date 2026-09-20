@@ -48,7 +48,6 @@ end
 local selectedGivePlayer = LocalPlayer.Name
 local selectedRemovePlayer = LocalPlayer.Name
 local selectedUsePlayer = LocalPlayer.Name
-local selectedSpamPlayer = LocalPlayer.Name
 
 local selectedGiveTool = allToolNames[1] or ""
 local selectedRemoveTool = ""
@@ -573,21 +572,6 @@ UseTab:CreateButton({
 })
 
 local SpamTab = Window:CreateTab("SpamTool", 4483362458)
-SpamTab:CreateSection("Target Player")
-
-local SpamPlayerDropdown = SpamTab:CreateDropdown({
-    Name = "Select Target Player",
-    Options = playerNames,
-    CurrentOption = { selectedSpamPlayer },
-    Flag = "SpamTargetPlayer",
-    Callback = function(Option)
-        local val = parseOptionValue(Option)
-        if val ~= "" then
-            selectedSpamPlayer = val
-        end
-    end
-})
-
 SpamTab:CreateSection("Tools")
 
 local SpamToolDropdown
@@ -662,17 +646,15 @@ SpamTab:CreateSection("Action")
 SpamTab:CreateButton({
     Name = "Execute",
     Callback = function()
-        if selectedSpamPlayer == "" or selectedSpamTool == "" or selectedSpamTool == "No matching tools" then
+        if selectedSpamTool == "" or selectedSpamTool == "No matching tools" then
             return
         end
 
-        local targetPlayer = Players:FindFirstChild(selectedSpamPlayer) or LocalPlayer
-        local isLocal = (targetPlayer == LocalPlayer)
         local targetName = selectedSpamTool
 
         for i = 1, spamCount do
             task.spawn(function()
-                GiveTool:FireServer(selectedSpamPlayer, targetName)
+                GiveTool:FireServer(LocalPlayer.Name, targetName)
             end)
         end
 
@@ -681,25 +663,21 @@ SpamTab:CreateButton({
             local deadline = tick() + 3.5
 
             while tick() < deadline do
-                for _, loc in ipairs({ targetPlayer:FindFirstChildOfClass("Backpack"), targetPlayer.Character }) do
+                for _, loc in ipairs({ LocalPlayer:FindFirstChildOfClass("Backpack"), LocalPlayer.Character }) do
                     if loc then
                         for _, item in ipairs(loc:GetChildren()) do
                             if item:IsA("Tool") and item.Name == targetName and not triggered[item] then
                                 triggered[item] = true
 
                                 task.spawn(function()
-                                    if isLocal and targetPlayer.Character then
-                                        item.Parent = targetPlayer.Character
+                                    if LocalPlayer.Character then
+                                        item.Parent = LocalPlayer.Character
                                     end
 
-                                    activateToolInstance(item, targetPlayer)
+                                    activateToolInstance(item, LocalPlayer)
 
-                                    task.wait(0.1)
-                                    if isLocal then
-                                        pcall(function() item:Destroy() end)
-                                    else
-                                        ClearTools:FireServer(targetPlayer.Name)
-                                    end
+                                    task.wait(0.25)
+                                    pcall(function() item:Destroy() end)
                                 end)
                             end
                         end
@@ -709,19 +687,15 @@ SpamTab:CreateButton({
                 task.wait(0.02)
             end
 
-            task.wait(0.1)
-            if isLocal then
-                for _, loc in ipairs({ targetPlayer:FindFirstChildOfClass("Backpack"), targetPlayer.Character }) do
-                    if loc then
-                        for _, item in ipairs(loc:GetChildren()) do
-                            if item:IsA("Tool") and item.Name == targetName then
-                                pcall(function() item:Destroy() end)
-                            end
+            task.wait(0.25)
+            for _, loc in ipairs({ LocalPlayer:FindFirstChildOfClass("Backpack"), LocalPlayer.Character }) do
+                if loc then
+                    for _, item in ipairs(loc:GetChildren()) do
+                        if item:IsA("Tool") and item.Name == targetName then
+                            pcall(function() item:Destroy() end)
                         end
                     end
                 end
-            else
-                ClearTools:FireServer(targetPlayer.Name)
             end
         end)
     end
@@ -893,7 +867,6 @@ local function updateAllPlayerDropdowns()
     if GivePlayerDropdown and GivePlayerDropdown.Refresh then pcall(function() GivePlayerDropdown:Refresh(updatedNames, true) end) end
     if RemovePlayerDropdown and RemovePlayerDropdown.Refresh then pcall(function() RemovePlayerDropdown:Refresh(updatedNames, true) end) end
     if UsePlayerDropdown and UsePlayerDropdown.Refresh then pcall(function() UsePlayerDropdown:Refresh(updatedNames, true) end) end
-    if SpamPlayerDropdown and SpamPlayerDropdown.Refresh then pcall(function() SpamPlayerDropdown:Refresh(updatedNames, true) end) end
     if BlacklistWhiteListDropdown and BlacklistWhiteListDropdown.Refresh then
         local currentSelected = {}
         for name, state in pairs(blacklistWhiteListPlayers) do
