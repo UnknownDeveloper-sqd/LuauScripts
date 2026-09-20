@@ -1,1 +1,290 @@
 
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/refs/heads/main/Rayfield/CustomRayfield.luau"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "MSPlayground | Admin Panel",
+    LoadingTitle = "MSPlayground | Admin Panel",
+    LoadingSubtitle = "By: UnknownSquad",
+    Theme = "Amethyst",
+    Width = 460,
+    Height = 360,
+    Font = "Code",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+local mouseDeletorActive = false
+local serverNotificationText = "Server Announcement"
+
+local function getF3XEndpoint()
+    local btools = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Building Tools"))
+        or (LocalPlayer:FindFirstChildOfClass("Backpack") and LocalPlayer.Backpack:FindFirstChild("Building Tools"))
+        or game:GetService("StarterPack"):FindFirstChild("Building Tools")
+    
+    local ep = btools and btools:FindFirstChild("SyncAPI") and btools.SyncAPI:FindFirstChild("ServerEndpoint")
+    if not ep then
+        ep = workspace:FindFirstChild("ServerEndpoint", true) or ReplicatedStorage:FindFirstChild("ServerEndpoint", true)
+    end
+    return ep
+end
+
+local function dropClipboard()
+    pcall(function()
+        local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        if not playerGui then return end
+
+        local dropEvent = playerGui:FindFirstChild("DropEvent", true)
+        if dropEvent and dropEvent:IsA("RemoteEvent") then
+            dropEvent:FireServer()
+        end
+
+        local dropBtn = playerGui:FindFirstChild("Overlay")
+            and playerGui.Overlay:FindFirstChild("Clipboard")
+            and playerGui.Overlay.Clipboard:FindFirstChild("Drop")
+
+        if dropBtn and type(getconnections) == "function" then
+            for _, conn in ipairs(getconnections(dropBtn.MouseButton1Click)) do
+                if conn.Function then
+                    pcall(conn.Function)
+                end
+            end
+        end
+
+        local clipboardScript = playerGui:FindFirstChild("ClipboardScript", true)
+        if clipboardScript and clipboardScript:FindFirstChild("Obtained") then
+            clipboardScript.Obtained.Value = false
+        end
+    end)
+end
+
+local selectionBox = Instance.new("SelectionBox")
+selectionBox.Name = "MouseDeletorBox"
+selectionBox.Color3 = Color3.fromRGB(0, 150, 255)
+selectionBox.LineThickness = 0.05
+selectionBox.SurfaceColor3 = Color3.fromRGB(0, 150, 255)
+selectionBox.SurfaceTransparency = 0.8
+selectionBox.Parent = game:GetService("CoreGui") or LocalPlayer:WaitForChild("PlayerGui")
+
+local renderConn = nil
+local clickConn = nil
+
+local function updateMouseDeletorState(enabled)
+    mouseDeletorActive = enabled
+    if enabled then
+        renderConn = RunService.RenderStepped:Connect(function()
+            if mouseDeletorActive and Mouse.Target and Mouse.Target:IsA("BasePart") then
+                selectionBox.Adornee = Mouse.Target
+            else
+                selectionBox.Adornee = nil
+            end
+        end)
+        
+        clickConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed then return end
+            if input.UserInputType == Enum.UserInputType.MouseButton1 and mouseDeletorActive then
+                local target = Mouse.Target
+                if target and target:IsA("BasePart") then
+                    local serverEndpoint = getF3XEndpoint()
+                    if serverEndpoint then
+                        pcall(function()
+                            serverEndpoint:InvokeServer("Remove", { target })
+                        end)
+                    end
+                end
+            end
+        end)
+    else
+        if renderConn then
+            renderConn:Disconnect()
+            renderConn = nil
+        end
+        if clickConn then
+            clickConn:Disconnect()
+            clickConn = nil
+        end
+        selectionBox.Adornee = nil
+    end
+end
+
+local MainTab = Window:CreateTab("Main", 4483362458)
+local MapTab = Window:CreateTab("Map", 4483362458)
+local ServerTab = Window:CreateTab("Server", 4483362458)
+
+MainTab:CreateSection("Character & Items")
+
+MainTab:CreateButton({
+    Name = "Drop Clipboard",
+    Callback = function()
+        dropClipboard()
+    end
+})
+
+MainTab:CreateButton({
+    Name = "Get ALL Badges",
+    Callback = function()
+        pcall(function()
+            local char = LocalPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if not root then return end
+
+            local badgeParts = {}
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("BasePart") then
+                    if v.Name:lower():find("badge") 
+                       or (v.Parent and v.Parent.Name:lower():find("badge"))
+                       or (v.Parent and v.Parent.Parent and v.Parent.Parent.Name:lower():find("badge")) then
+                        table.insert(badgeParts, v)
+                    end
+                end
+            end
+
+            for _, part in ipairs(badgeParts) do
+                task.spawn(function()
+                    pcall(function()
+                        if firetouchinterest then
+                            firetouchinterest(root, part, 0)
+                            firetouchinterest(root, part, 1)
+                        else
+                            root.CFrame = part.CFrame
+                        end
+                    end)
+                end)
+            end
+        end)
+    end
+})
+
+MainTab:CreateSection("Prop Cleaner")
+
+MainTab:CreateButton({
+    Name = "Remove ALL Props",
+    Callback = function()
+        local serverEndpoint = getF3XEndpoint()
+        local protected = {
+            ["Lobby"] = true,
+            ["MAPS"] = true,
+            ["Terrain"] = true,
+            ["Camera"] = true,
+            ["Baseplate"] = true
+        }
+
+        local targets = {}
+        for _, child in ipairs(workspace:GetChildren()) do
+            if not protected[child.Name] and not Players:GetPlayerFromCharacter(child) then
+                if child:IsA("BasePart") or child:IsA("Model") then
+                    table.insert(targets, child)
+                end
+                for _, desc in ipairs(child:GetDescendants()) do
+                    if desc:IsA("BasePart") or desc:IsA("Model") then
+                        table.insert(targets, desc)
+                    end
+                end
+            end
+        end
+
+        if #targets > 0 and serverEndpoint then
+            task.spawn(function()
+                pcall(function()
+                    serverEndpoint:InvokeServer("Remove", targets)
+                end)
+            end)
+        end
+    end
+})
+
+MapTab:CreateSection("Target Deletion")
+
+MapTab:CreateToggle({
+    Name = "Mouse Deletor",
+    CurrentValue = false,
+    Flag = "MouseDeletorToggle",
+    Callback = function(Value)
+        updateMouseDeletorState(Value)
+    end
+})
+
+MapTab:CreateSection("Zone Purge")
+
+MapTab:CreateButton({
+    Name = "Delete MAPS Folder",
+    Callback = function()
+        local mapsFolder = workspace:FindFirstChild("MAPS") or workspace:FindFirstChild("Maps")
+        if mapsFolder then
+            local serverEndpoint = getF3XEndpoint()
+            if serverEndpoint then
+                local targets = {}
+                for _, desc in ipairs(mapsFolder:GetDescendants()) do
+                    if desc:IsA("BasePart") or desc:IsA("Model") then
+                        table.insert(targets, desc)
+                    end
+                end
+                if #targets > 0 then
+                    task.spawn(function()
+                        pcall(function()
+                            serverEndpoint:InvokeServer("Remove", targets)
+                        end)
+                    end)
+                end
+            end
+        end
+    end
+})
+
+MapTab:CreateButton({
+    Name = "Delete Lobby Folder",
+    Callback = function()
+        local lobbyFolder = workspace:FindFirstChild("Lobby") or workspace:FindFirstChild("LOBBY")
+        if lobbyFolder then
+            local serverEndpoint = getF3XEndpoint()
+            if serverEndpoint then
+                local targets = {}
+                for _, desc in ipairs(lobbyFolder:GetDescendants()) do
+                    if desc:IsA("BasePart") or desc:IsA("Model") then
+                        table.insert(targets, desc)
+                    end
+                end
+                if #targets > 0 then
+                    task.spawn(function()
+                        pcall(function()
+                            serverEndpoint:InvokeServer("Remove", targets)
+                        end)
+                    end)
+                end
+            end
+        end
+    end
+})
+
+ServerTab:CreateSection("Announcements")
+
+ServerTab:CreateInput({
+    Name = "Notification Text",
+    PlaceholderText = "Type notification text here",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text)
+        if Text and Text ~= "" then
+            serverNotificationText = Text
+        end
+    end
+})
+
+ServerTab:CreateButton({
+    Name = "Send Server Notification",
+    Callback = function()
+        local notifClient = ReplicatedStorage:FindFirstChild("NotificationClient", true)
+        if notifClient then
+            if notifClient:IsA("RemoteEvent") then
+                pcall(function() notifClient:FireServer(serverNotificationText, 10) end)
+            elseif notifClient:IsA("BindableEvent") then
+                pcall(function() notifClient:Fire(serverNotificationText, 10) end)
+            end
+        end
+    end
+})
