@@ -242,7 +242,7 @@ end
 local exec = (identifyexecutor and identifyexecutor()) or (getexecutorname and getexecutorname()) or ""
 local isMobile = exec:find("Delta") or exec:find("Codex") or UserInputService.TouchEnabled
 
-loadstring(game:HttpGet("https://gist.github.com/UnknownDeveloper-sqd/fbc0276082f0697b01e6234eb7e072af/raw/1198bd2e647983286eb4fb535211d42e3e3d29b4/Script"))()
+loadstring(game:HttpGet("https://gist.github.com/UnknownDeveloper-sqd/ab39cd1137a386e6648a8bd77269337f/raw/94c0ae18b5e620c09468f5c427e92646b0ab9d15/Script"))()
 local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/refs/heads/main/Rayfield/CustomRayfield.luau"))()
 
 local Window = Rayfield:CreateWindow({
