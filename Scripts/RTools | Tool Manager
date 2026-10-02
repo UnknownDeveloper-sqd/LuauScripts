@@ -1,10 +1,12 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
 pcall(function()
-    for _, g in ipairs(game:GetService("CoreGui"):GetChildren()) do
+    local container = (gethui and gethui()) or game:GetService("CoreGui") or LocalPlayer:FindFirstChild("PlayerGui")
+    for _, g in ipairs(container:GetChildren()) do
         if g.Name:find("Rayfield") or (g:IsA("ScreenGui") and g:FindFirstChild("Main") and g.Main:FindFirstChild("Topbar")) then
             g:Destroy()
         end
@@ -16,7 +18,7 @@ local GetToolList = ToolGiverRemotes:WaitForChild("GetToolList")
 local GiveTool = ToolGiverRemotes:WaitForChild("GiveTool")
 local ClearTools = ToolGiverRemotes:WaitForChild("ClearTools")
 
-local rawToolData = GetToolList:InvokeServer()
+local rawToolData = GetToolList:InvokeServer() or {}
 local allToolNames = {}
 for _, t in ipairs(rawToolData) do
     if t and t.Name then
@@ -237,6 +239,10 @@ local function activateToolInstance(toolObj, targetPlayer)
     end
 end
 
+local exec = (identifyexecutor and identifyexecutor()) or (getexecutorname and getexecutorname()) or ""
+local isMobile = exec:find("Delta") or exec:find("Codex") or UserInputService.TouchEnabled
+
+loadstring(game:HttpGet("https://gist.github.com/UnknownDeveloper-sqd/fbc0276082f0697b01e6234eb7e072af/raw/1198bd2e647983286eb4fb535211d42e3e3d29b4/Script"))()
 local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/refs/heads/main/Rayfield/CustomRayfield.luau"))()
 
 local Window = Rayfield:CreateWindow({
@@ -248,7 +254,8 @@ local Window = Rayfield:CreateWindow({
     Height = 360,
     Font = "Code",
     ConfigurationSaving = { Enabled = false },
-    KeySystem = false
+    KeySystem = false,
+    MobileToggle = isMobile
 })
 
 local GiveTab = Window:CreateTab("GiveTool", 4483362458)
