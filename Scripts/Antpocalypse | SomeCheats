@@ -1,0 +1,235 @@
+local Rayfield = loadstring(game:HttpGet("https://github.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/raw/refs/heads/main/Rayfield/CustomRayfield.luau"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Antpocalypse | SomeCheats",
+    LoadingTitle = "Antpocalypse | SomeCheats",
+    LoadingSubtitle = "By: UnknownSquad",
+    Theme = "Amethyst",
+    Width = 460,
+    Height = 360,
+    Font = "Code",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+local KillTab = Window:CreateTab("Kill")
+local PlayerTab = Window:CreateTab("Player")
+local WeaponTab = Window:CreateTab("Weapon")
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local Network = require(ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Network") :: ModuleScript)
+
+local killEnabled = false
+local selectedTargets = {"Bots", "Players"}
+
+local healEnabled = false
+
+local firerateEnabled = false
+local firerateValue = 6000
+local noSpreadEnabled = false
+local infAmmoEnabled = false
+
+local function isTargetSelected(targetType)
+    if type(selectedTargets) == "table" then
+        if selectedTargets[targetType] == true then return true end
+        for _, val in pairs(selectedTargets) do
+            if val == targetType then return true end
+        end
+    elseif type(selectedTargets) == "string" then
+        if selectedTargets == targetType then return true end
+    end
+    return false
+end
+
+KillTab:CreateToggle({
+    Name = "Kill",
+    CurrentValue = false,
+    Flag = "KillToggle",
+    Callback = function(v)
+        killEnabled = v
+    end
+})
+
+KillTab:CreateDropdown({
+    Name = "Target Selector",
+    Options = {"Bots", "Players"},
+    CurrentOption = {"Bots", "Players"},
+    MultipleOptions = true,
+    Flag = "TargetDropdown",
+    Callback = function(v)
+        selectedTargets = v
+    end
+})
+
+PlayerTab:CreateToggle({
+    Name = "Insta-Heal",
+    CurrentValue = false,
+    Flag = "InstaHealToggle",
+    Callback = function(v)
+        healEnabled = v
+    end
+})
+
+WeaponTab:CreateToggle({
+    Name = "FirerateBoost",
+    CurrentValue = false,
+    Flag = "FirerateToggle",
+    Callback = function(v)
+        firerateEnabled = v
+    end
+})
+
+WeaponTab:CreateSlider({
+    Name = "Firerate Value",
+    Range = {100, 10000},
+    Increment = 100,
+    Suffix = "",
+    CurrentValue = 6000,
+    Flag = "FirerateSlider",
+    Callback = function(v)
+        firerateValue = v
+    end
+})
+
+WeaponTab:CreateToggle({
+    Name = "NoSpread",
+    CurrentValue = false,
+    Flag = "NoSpreadToggle",
+    Callback = function(v)
+        noSpreadEnabled = v
+    end
+})
+
+WeaponTab:CreateToggle({
+    Name = "InfAmmo",
+    CurrentValue = false,
+    Flag = "InfAmmoToggle",
+    Callback = function(v)
+        infAmmoEnabled = v
+    end
+})
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+
+        if killEnabled then
+            pcall(function()
+                local char = LocalPlayer.Character
+                local tool = char and char:FindFirstChildOfClass("Tool")
+                local myTeam = LocalPlayer.Team
+                local myTeamName = myTeam and myTeam.Name
+                local enemyTeamName = (myTeamName == "Black") and "Red" or ((myTeamName == "Red") and "Black" or nil)
+                local myPos = char and char:FindFirstChild("HumanoidRootPart") and char.HumanoidRootPart.Position or Vector3.new(0, 50, 0)
+
+                if isTargetSelected("Players") then
+                    for _, p in ipairs(Players:GetPlayers()) do
+                        if p ~= LocalPlayer and p.Team ~= myTeam and p.Character then
+                            local enemyChar = p.Character
+                            local head = enemyChar:FindFirstChild("Head") or enemyChar:FindFirstChild("HumanoidRootPart")
+                            local hum = enemyChar:FindFirstChildOfClass("Humanoid")
+                            if head and hum and hum.Health > 0 then
+                                local headPos = head.Position
+                                local dir = (headPos - myPos).Unit
+                                Network:FireServer("ClientHitCharacter", tool, myPos, headPos, enemyChar, head, "Bullet", dir)
+                            end
+                        end
+                    end
+                end
+
+                if isTargetSelected("Bots") then
+                    local charSpawned = workspace:FindFirstChild("CharactersSpawned")
+                    local npcsFolder = charSpawned and charSpawned:FindFirstChild("Npcs")
+                    if npcsFolder then
+                        for _, teamFolder in ipairs(npcsFolder:GetChildren()) do
+                            if not enemyTeamName or teamFolder.Name == enemyTeamName then
+                                for _, npc in ipairs(teamFolder:GetChildren()) do
+                                    if npc:IsA("Model") then
+                                        local head = npc:FindFirstChild("Head") or npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChildOfClass("BasePart")
+                                        local hum = npc:FindFirstChildOfClass("Humanoid")
+                                        if head and hum and hum.Health > 0 then
+                                            local headPos = head.Position
+                                            local dir = (headPos - myPos).Unit
+                                            Network:FireServer("ClientHitCharacter", tool, myPos, headPos, npc, head, "Bullet", dir)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+
+        if healEnabled then
+            pcall(function()
+                local char = LocalPlayer.Character
+                if char then
+                    char:SetAttribute("HasMedicPassive", true)
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        Network:FireServer("PassiveMedicHeal", hum)
+                        if hum.Health < hum.MaxHealth then
+                            hum.Health = hum.MaxHealth
+                        end
+                    end
+
+                    local backpack = LocalPlayer:FindFirstChild("Backpack")
+                    for _, container in ipairs({char, backpack}) do
+                        if container then
+                            for _, t in ipairs(container:GetChildren()) do
+                                if t:IsA("Tool") then
+                                    t:SetAttribute("DamageBlock", 99999)
+                                    t:SetAttribute("MaxDamageBlock", 99999)
+                                end
+                            end
+                        end
+                    end
+                    Network:FireServer("RegenBlock", 99999)
+                end
+            end)
+        end
+
+        pcall(function()
+            local char = LocalPlayer.Character
+            local backpack = LocalPlayer:FindFirstChild("Backpack")
+            for _, container in ipairs({char, backpack}) do
+                if container then
+                    for _, t in ipairs(container:GetChildren()) do
+                        if t:IsA("Tool") then
+                            local cfg = t:FindFirstChild("Config")
+                            if cfg and cfg:IsA("ModuleScript") then
+                                pcall(function()
+                                    local c = require(cfg)
+                                    if noSpreadEnabled then
+                                        c.Spread = 0
+                                        c.ShotgunSpread = 0
+                                        if type(c.CrossHairStats) == "table" then
+                                            c.CrossHairStats.MaxSpread = 0
+                                            c.CrossHairStats.MinSpread = 0
+                                            c.CrossHairStats.increasePerSecond = 0
+                                        end
+                                    end
+                                    if firerateEnabled then
+                                        c.FireRate = firerateValue
+                                        c.Cooldown = 0
+                                        c.Automatic = true
+                                        t:SetAttribute("CanFire", true)
+                                        t:SetAttribute("IsReloading", false)
+                                    end
+                                    if infAmmoEnabled then
+                                        c.MaxAmmo = 999999
+                                        c.Ammo = 999999
+                                    end
+                                end)
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end)
