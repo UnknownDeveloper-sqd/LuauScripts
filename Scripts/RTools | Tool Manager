@@ -130,17 +130,8 @@ local function getTargetPlayerTools(playerName)
     return displayList
 end
 
-local function getTargetPlayerToolsForUse(playerName)
+local function getTargetPlayerToolsForUse()
     currentUseToolObjects = {}
-    if not playerName or playerName == "" then
-        return { "No tools in inventory" }
-    end
-
-    local target = Players:FindFirstChild(playerName)
-    if not target then
-        return { "No tools in inventory" }
-    end
-
     local rawTools = {}
     local nameCounts = {}
 
@@ -155,11 +146,13 @@ local function getTargetPlayerToolsForUse(playerName)
         end
     end
 
-    collectFrom(target:FindFirstChildOfClass("Backpack") or target:FindFirstChild("Backpack"))
-    collectFrom(target.Character)
+    collectFrom(LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack"))
+    collectFrom(LocalPlayer.Character)
 
     if #rawTools == 0 then
-        return { "No tools in inventory" }
+        for _, name in ipairs(allToolNames) do
+            table.insert(rawTools, { Name = name })
+        end
     end
 
     local currentNameIndex = {}
@@ -172,11 +165,18 @@ local function getTargetPlayerToolsForUse(playerName)
             currentNameIndex[tool.Name] = (currentNameIndex[tool.Name] or 0) + 1
             displayName = string.format("%s #%d", tool.Name, currentNameIndex[tool.Name])
         end
-        table.insert(displayList, displayName)
-        currentUseToolObjects[displayName] = tool
+        if not table.find(displayList, displayName) then
+            table.insert(displayList, displayName)
+        end
+        if typeof(tool) == "Instance" then
+            currentUseToolObjects[displayName] = tool
+        end
     end
 
     table.sort(displayList)
+    if #displayList == 0 then
+        return { "No tools in inventory" }
+    end
     return displayList
 end
 
@@ -201,6 +201,7 @@ local function activateToolInstance(toolObj, targetPlayer)
     if not toolObj or not toolObj.Parent then return end
 
     targetPlayer = targetPlayer or LocalPlayer
+    local isLocal = (targetPlayer == LocalPlayer)
     local targetChar = targetPlayer and targetPlayer.Character
     local targetRoot = targetChar and (targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChild("Torso") or targetChar:FindFirstChild("UpperTorso"))
     local targetHum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
@@ -212,10 +213,13 @@ local function activateToolInstance(toolObj, targetPlayer)
 
     local bp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
     if toolObj.Parent ~= char and (toolObj.Parent == bp or toolObj.Parent:IsDescendantOf(LocalPlayer)) then
-        if hum then
-            hum:EquipTool(toolObj)
-        else
-            toolObj.Parent = char
+        toolObj.Parent = char
+    end
+
+    if not isLocal and targetRoot then
+        local cam = workspace.CurrentCamera
+        if cam then
+            cam.CFrame = CFrame.new(cam.CFrame.Position, targetRoot.Position)
         end
     end
 
@@ -230,16 +234,8 @@ local function activateToolInstance(toolObj, targetPlayer)
             pcall(function() conn:Fire() end)
         end
     end
-    pcall(function()
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton1(Vector2.new(0, 0))
-    end)
-    pcall(function()
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-    end)
 
-    if targetChar and firetouchinterest then
+    if not isLocal and targetChar and firetouchinterest then
         local handle = toolObj:FindFirstChild("Handle") or toolObj:FindFirstChildWhichIsA("BasePart")
         if handle and targetRoot then
             pcall(function()
@@ -249,21 +245,18 @@ local function activateToolInstance(toolObj, targetPlayer)
         end
     end
 
-    for _, child in ipairs(toolObj:GetChildren()) do
-        if child:IsA("RemoteEvent") then
-            pcall(function() child:FireServer() end)
-            pcall(function() child:FireServer(targetPlayer) end)
-            pcall(function() child:FireServer(targetChar) end)
-            pcall(function() child:FireServer(targetPos) end)
-            pcall(function() child:FireServer(targetCFrame) end)
-            pcall(function() child:FireServer(targetHum) end)
-            pcall(function() child:FireServer(targetPlayer.Name) end)
-            pcall(function() child:FireServer(targetChar, targetPos) end)
-            pcall(function() child:FireServer(targetCFrame, targetChar) end)
-        elseif child:IsA("RemoteFunction") then
-            pcall(function() child:InvokeServer() end)
-            pcall(function() child:InvokeServer(targetPlayer) end)
-            pcall(function() child:InvokeServer(targetChar) end)
+    if not isLocal then
+        for _, child in ipairs(toolObj:GetChildren()) do
+            if child:IsA("RemoteEvent") then
+                pcall(function() child:FireServer() end)
+                pcall(function() child:FireServer(targetPlayer) end)
+                pcall(function() child:FireServer(targetChar) end)
+                pcall(function() child:FireServer(targetPos) end)
+                pcall(function() child:FireServer(targetCFrame) end)
+            elseif child:IsA("RemoteFunction") then
+                pcall(function() child:InvokeServer() end)
+                pcall(function() child:InvokeServer(targetPlayer) end)
+            end
         end
     end
 end
@@ -442,13 +435,19 @@ RemoveTab:CreateButton({
         if selectedRemovePlayer == LocalPlayer.Name then
             local targetTool = currentTargetToolObjects[selectedRemoveTool]
             if targetTool and targetTool.Parent then
-                targetTool:Destroy()
+                pcall(function()
+                    targetTool.Parent = workspace
+                    targetTool:Destroy()
+                end)
             else
                 for _, parent in ipairs({ LocalPlayer:FindFirstChildOfClass("Backpack"), LocalPlayer.Character }) do
                     if parent then
                         local item = parent:FindFirstChild(baseName)
                         if item and item:IsA("Tool") then
-                            item:Destroy()
+                            pcall(function()
+                                item.Parent = workspace
+                                item:Destroy()
+                            end)
                             break
                         end
                     end
@@ -492,13 +491,13 @@ UseTab:CreateSection("Target Player")
 local UsePlayerDropdown
 local UseToolDropdown
 
-local initialUseTools = getTargetPlayerToolsForUse(selectedUsePlayer)
+local initialUseTools = getTargetPlayerToolsForUse()
 selectedUseTool = initialUseTools[1] or ""
 filteredUseTools = initialUseTools
 
 local function refreshUseToolsDropdown(query)
     query = string.lower(query or "")
-    local playerTools = getTargetPlayerToolsForUse(selectedUsePlayer)
+    local playerTools = getTargetPlayerToolsForUse()
     filteredUseTools = {}
 
     if query == "" then
@@ -537,7 +536,6 @@ UsePlayerDropdown = UseTab:CreateDropdown({
         local val = parseOptionValue(Option)
         if val ~= "" then
             selectedUsePlayer = val
-            refreshUseToolsDropdown("")
         end
     end
 })
@@ -574,31 +572,26 @@ UseTab:CreateButton({
         end
 
         local targetP = Players:FindFirstChild(selectedUsePlayer) or LocalPlayer
-        local toolObj = currentUseToolObjects[selectedUseTool]
         local baseName = string.gsub(selectedUseTool, " #%d+$", "")
 
+        local toolObj = currentUseToolObjects[selectedUseTool]
         if not toolObj or not toolObj.Parent then
-            local bp = targetP and (targetP:FindFirstChildOfClass("Backpack") or targetP:FindFirstChild("Backpack"))
-            local targetChar = targetP and targetP.Character
-            toolObj = (bp and bp:FindFirstChild(baseName)) or (targetChar and targetChar:FindFirstChild(baseName))
+            local bp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
+            local char = LocalPlayer.Character
+            toolObj = (bp and bp:FindFirstChild(baseName)) or (char and char:FindFirstChild(baseName))
         end
 
         if not toolObj or not toolObj.Parent then
-            local myBp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
-            local myChar = LocalPlayer.Character
-            toolObj = (myBp and myBp:FindFirstChild(baseName)) or (myChar and myChar:FindFirstChild(baseName))
+            GiveTool:FireServer(LocalPlayer.Name, baseName)
+            local bp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
+            toolObj = bp and bp:WaitForChild(baseName, 1)
         end
 
         if toolObj and toolObj.Parent then
             activateToolInstance(toolObj, targetP)
-        else
-            GiveTool:FireServer(LocalPlayer.Name, baseName)
-            task.spawn(function()
-                local myBp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
-                local newTool = myBp and myBp:WaitForChild(baseName, 1)
-                if newTool then
-                    activateToolInstance(newTool, targetP)
-                end
+            pcall(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton1(Vector2.new(500, 500))
             end)
         end
     end
@@ -608,27 +601,42 @@ UseTab:CreateButton({
     Name = "Use All",
     Callback = function()
         local targetP = Players:FindFirstChild(selectedUsePlayer) or LocalPlayer
-        local playerTools = getTargetPlayerToolsForUse(selectedUsePlayer)
-        task.spawn(function()
-            local batch = 0
-            for _, displayName in ipairs(playerTools) do
-                if displayName ~= "No tools in inventory" and displayName ~= "No matching tools" then
-                    local toolObj = currentUseToolObjects[displayName]
-                    local baseName = string.gsub(displayName, " #%d+$", "")
-                    if not toolObj or not toolObj.Parent then
-                        local bp = targetP and (targetP:FindFirstChildOfClass("Backpack") or targetP:FindFirstChild("Backpack"))
-                        local targetChar = targetP and targetP.Character
-                        toolObj = (bp and bp:FindFirstChild(baseName)) or (targetChar and targetChar:FindFirstChild(baseName))
-                    end
-                    if toolObj and toolObj.Parent then
-                        activateToolInstance(toolObj, targetP)
-                        batch = batch + 1
-                        if batch % 10 == 0 then
-                            task.wait()
-                        end
-                    end
+        local bp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
+        local char = LocalPlayer.Character
+
+        local toolsToUse = {}
+        if bp then
+            for _, item in ipairs(bp:GetChildren()) do
+                if item:IsA("Tool") then
+                    table.insert(toolsToUse, item)
                 end
             end
+        end
+        if char then
+            for _, item in ipairs(char:GetChildren()) do
+                if item:IsA("Tool") then
+                    table.insert(toolsToUse, item)
+                end
+            end
+        end
+
+        task.spawn(function()
+            for _, toolObj in ipairs(toolsToUse) do
+                if toolObj and toolObj.Parent then
+                    toolObj.Parent = char
+                end
+            end
+
+            for _, toolObj in ipairs(toolsToUse) do
+                if toolObj and toolObj.Parent then
+                    activateToolInstance(toolObj, targetP)
+                end
+            end
+
+            pcall(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton1(Vector2.new(500, 500))
+            end)
         end)
     end
 })
@@ -715,58 +723,76 @@ SpamTab:CreateButton({
         local targetName = selectedSpamTool
 
         task.spawn(function()
-            local batchSize = 15
-            local totalSent = 0
-
-            while totalSent < spamCount do
-                local currentBatch = math.min(batchSize, spamCount - totalSent)
-                for i = 1, currentBatch do
+            for i = 1, spamCount do
+                task.spawn(function()
                     GiveTool:FireServer(LocalPlayer.Name, targetName)
-                end
-                totalSent = totalSent + currentBatch
+                end)
+            end
 
-                local deadline = tick() + 0.5
-                local bp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
-                local char = LocalPlayer.Character
+            local spawned = {}
+            local deadline = tick() + 2.5
+            local bp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
+            local char = LocalPlayer.Character
 
-                while tick() < deadline do
-                    local foundAny = false
-                    if bp then
-                        for _, item in ipairs(bp:GetChildren()) do
-                            if item:IsA("Tool") and item.Name == targetName then
-                                foundAny = true
-                                activateToolInstance(item, LocalPlayer)
-                                pcall(function() item:Destroy() end)
+            while tick() < deadline and #spawned < spamCount do
+                for _, loc in ipairs({ bp, char }) do
+                    if loc then
+                        for _, item in ipairs(loc:GetChildren()) do
+                            if item:IsA("Tool") and item.Name == targetName and not item:GetAttribute("IsSpamTool") then
+                                item:SetAttribute("IsSpamTool", true)
+                                table.insert(spawned, item)
                             end
                         end
                     end
-                    if char then
-                        for _, item in ipairs(char:GetChildren()) do
-                            if item:IsA("Tool") and item.Name == targetName then
-                                foundAny = true
-                                activateToolInstance(item, LocalPlayer)
-                                pcall(function() item:Destroy() end)
-                            end
-                        end
-                    end
-
-                    if foundAny then
-                        break
-                    end
-                    task.wait(0.01)
                 end
-
                 task.wait(0.02)
             end
 
-            task.wait(0.1)
-            local bp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
-            local char = LocalPlayer.Character
+            for _, toolObj in ipairs(spawned) do
+                if toolObj and toolObj.Parent then
+                    toolObj.Parent = char
+                end
+            end
+
+            for _, toolObj in ipairs(spawned) do
+                if toolObj and toolObj.Parent then
+                    pcall(function() toolObj:Activate() end)
+                    if firesignal then pcall(firesignal, toolObj.Activated) end
+                    if getconnections then
+                        for _, c in ipairs(getconnections(toolObj.Activated)) do
+                            pcall(function() c:Fire() end)
+                        end
+                    end
+                    for _, c in ipairs(toolObj:GetChildren()) do
+                        if c:IsA("RemoteEvent") then pcall(function() c:FireServer() end) end
+                    end
+                end
+            end
+
+            pcall(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton1(Vector2.new(500, 500))
+            end)
+
+            task.wait(0.15)
+
+            for _, toolObj in ipairs(spawned) do
+                if toolObj and toolObj.Parent then
+                    pcall(function()
+                        toolObj.Parent = workspace
+                        toolObj:Destroy()
+                    end)
+                end
+            end
+
             for _, loc in ipairs({ bp, char }) do
                 if loc then
                     for _, item in ipairs(loc:GetChildren()) do
-                        if item:IsA("Tool") and item.Name == targetName then
-                            pcall(function() item:Destroy() end)
+                        if item:IsA("Tool") and item:GetAttribute("IsSpamTool") then
+                            pcall(function()
+                                item.Parent = workspace
+                                item:Destroy()
+                            end)
                         end
                     end
                 end
@@ -896,7 +922,10 @@ task.spawn(function()
                             if item:IsA("Tool") then
                                 if isAll or blacklistSelectedTools[item.Name] then
                                     shouldClearServer = true
-                                    pcall(function() item:Destroy() end)
+                                    pcall(function()
+                                        item.Parent = workspace
+                                        item:Destroy()
+                                    end)
                                 end
                             end
                         end
@@ -955,37 +984,40 @@ local function updateAllPlayerDropdowns()
     refreshUseToolsDropdown("")
 end
 
+local refreshDebounce = false
+local function scheduleInventoryRefresh()
+    if refreshDebounce then return end
+    refreshDebounce = true
+    task.delay(0.5, function()
+        refreshDebounce = false
+        refreshUseToolsDropdown("")
+        refreshRemoveToolsDropdown()
+    end)
+end
+
 local function setupInventoryListeners()
     local bp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
     if bp then
         bp.ChildAdded:Connect(function(item)
-            if item:IsA("Tool") then
-                task.wait(0.1)
-                refreshUseToolsDropdown("")
-                refreshRemoveToolsDropdown()
+            if item:IsA("Tool") and not item:GetAttribute("IsSpamTool") then
+                scheduleInventoryRefresh()
             end
         end)
         bp.ChildRemoved:Connect(function(item)
-            if item:IsA("Tool") then
-                task.wait(0.1)
-                refreshUseToolsDropdown("")
-                refreshRemoveToolsDropdown()
+            if item:IsA("Tool") and not item:GetAttribute("IsSpamTool") then
+                scheduleInventoryRefresh()
             end
         end)
     end
     if LocalPlayer.Character then
         LocalPlayer.Character.ChildAdded:Connect(function(item)
-            if item:IsA("Tool") then
-                task.wait(0.1)
-                refreshUseToolsDropdown("")
-                refreshRemoveToolsDropdown()
+            if item:IsA("Tool") and not item:GetAttribute("IsSpamTool") then
+                scheduleInventoryRefresh()
             end
         end)
         LocalPlayer.Character.ChildRemoved:Connect(function(item)
-            if item:IsA("Tool") then
-                task.wait(0.1)
-                refreshUseToolsDropdown("")
-                refreshRemoveToolsDropdown()
+            if item:IsA("Tool") and not item:GetAttribute("IsSpamTool") then
+                scheduleInventoryRefresh()
             end
         end)
     end
