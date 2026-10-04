@@ -1,5 +1,5 @@
 local Rayfield = loadstring(game:HttpGet("https://github.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/raw/refs/heads/main/Rayfield/CustomRayfield.luau"))()
-loadstring(game:HttpGet("https://gist.github.com/UnknownDeveloper-sqd/f73a3e025cd7c368fd39b42d811ed6e9/raw/aa6386c50f7b8c3eeb4b3a5ae44d6fe0014f55d5/Script"))()
+loadstring(game:HttpGet("https://gist.github.com/UnknownDeveloper-sqd/6b45501daf7aeeaf96f746684591f301/raw/1af59e70343e582948c62f987eb1c4026a052dd6/Script"))()
 
 local Window = Rayfield:CreateWindow({
     Name = "Antpocalypse | SomeCheats",
