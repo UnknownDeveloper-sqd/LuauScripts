@@ -1,0 +1,46 @@
+local Rayfield = loadstring(game:HttpGet("https://github.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/raw/refs/heads/main/Rayfield/CustomRayfield.luau"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "B&Block | Code List",
+    LoadingTitle = "B&Block | Code List",
+    LoadingSubtitle = "By: UnknownSquad",
+    Theme = "Amethyst",
+    Width = 460,
+    Height = 360,
+    Font = "Code",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+local MainTab = Window:CreateTab("Codes", 4483362458)
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local req = require :: any
+local TEvent = req(ReplicatedStorage.Shared.Core.TEvent)
+local RedeemRemote = TEvent.Remote.new("RedeemCode_Redeem")
+
+MainTab:CreateButton({
+    Name = "Use Codes",
+    Callback = function()
+        local codeModule = req(ReplicatedStorage.Config.code)
+        for _, codeData in pairs(codeModule) do
+            if type(codeData) == "table" and codeData.code then
+                RedeemRemote:FireServer(tostring(codeData.code))
+                task.wait(0.3)
+            end
+        end
+    end
+})
+
+local codeModule = req(ReplicatedStorage.Config.code)
+local codeList = {}
+for _, codeData in pairs(codeModule) do
+    if type(codeData) == "table" and codeData.code then
+        table.insert(codeList, tostring(codeData.code))
+    end
+end
+
+MainTab:CreateParagraph({
+    Title = "Active:",
+    Content = table.concat(codeList, ", ")
+})
