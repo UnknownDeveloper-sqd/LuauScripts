@@ -265,7 +265,7 @@ local exec = (identifyexecutor and identifyexecutor()) or (getexecutorname and g
 local isMobile = UserInputService.TouchEnabled or exec:find("Delta") or exec:find("Codex") or exec:find("Arceus") or exec:find("Fluxus") or exec:find("Hydrogen") or (UserInputService.KeyboardEnabled == false)
 
 loadstring(game:HttpGet("https://gist.github.com/UnknownDeveloper-sqd/ab39cd1137a386e6648a8bd77269337f/raw/94c0ae18b5e620c09468f5c427e92646b0ab9d15/Script"))()
-local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/refs/heads/main/Rayfield/CustomRayfield.luau"))()
+local Rayfield = loadstring(game:HttpGet("https://github.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/raw/refs/heads/main/Rayfield/CustomRayfield.luau"))()
 
 local Window = Rayfield:CreateWindow({
     Name = "RTools | Tool Manager",
@@ -801,6 +801,177 @@ SpamTab:CreateButton({
     end
 })
 
+local TrollTab = Window:CreateTab("TrollTool", 4483362458)
+TrollTab:CreateSection("Target Players")
+
+local selectedTrollPlayers = {}
+local function getTrollPlayerOptions()
+    local opts = { "All Players" }
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            table.insert(opts, p.Name)
+        end
+    end
+    return opts
+end
+
+local TrollPlayerDropdown = TrollTab:CreateDropdown({
+    Name = "Select Target Players",
+    Options = getTrollPlayerOptions(),
+    CurrentOption = {},
+    MultipleOptions = true,
+    Flag = "TrollTargetPlayers",
+    Callback = function(Options)
+        table.clear(selectedTrollPlayers)
+        local opts = type(Options) == "table" and Options or { Options }
+        for _, opt in ipairs(opts) do
+            selectedTrollPlayers[opt] = true
+        end
+    end
+})
+
+local function getSelectedTargets()
+    local targets = {}
+    if selectedTrollPlayers["All Players"] then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                table.insert(targets, p)
+            end
+        end
+    else
+        for name, selected in pairs(selectedTrollPlayers) do
+            if selected and name ~= "All Players" then
+                local p = Players:FindFirstChild(name)
+                if p and p.Character then
+                    table.insert(targets, p)
+                end
+            end
+        end
+    end
+    return targets
+end
+
+local function getTrollTool(name)
+    local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(name) or LocalPlayer.Backpack:FindFirstChild(name)
+    if not tool then
+        GiveTool:FireServer(LocalPlayer.Name, name)
+        tool = LocalPlayer.Backpack:WaitForChild(name, 2)
+    end
+    return tool
+end
+
+TrollTab:CreateSection("Actions")
+
+TrollTab:CreateButton({
+    Name = "Cleave",
+    Callback = function()
+        local targets = getSelectedTargets()
+        for _, target in ipairs(targets) do
+            task.spawn(function()
+                if not target.Character then return end
+                local part = target.Character:FindFirstChild("Torso") 
+                    or target.Character:FindFirstChild("UpperTorso") 
+                    or target.Character:FindFirstChild("HumanoidRootPart") 
+                    or target.Character:FindFirstChild("LowerTorso")
+                if not part then return end
+
+                GiveTool:FireServer(LocalPlayer.Name, "Cleave")
+                local bp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
+                local tool = bp and bp:WaitForChild("Cleave", 1.5)
+                if not tool then
+                    tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Cleave")
+                end
+
+                if tool then
+                    local remote = tool:FindFirstChild("RemoteEvent") or tool:FindFirstChildWhichIsA("RemoteEvent", true)
+                    if remote then
+                        tool.Parent = LocalPlayer.Character
+                        remote:FireServer(part)
+                    end
+                    task.wait(0.1)
+                    pcall(function()
+                        tool.Parent = workspace
+                        tool:Destroy()
+                    end)
+                end
+            end)
+            task.wait(0.05)
+        end
+
+        task.wait(0.3)
+        pcall(function()
+            local bp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
+            if bp then
+                for _, item in ipairs(bp:GetChildren()) do
+                    if item:IsA("Tool") and item.Name == "Cleave" then
+                        item.Parent = workspace
+                        item:Destroy()
+                    end
+                end
+            end
+            if LocalPlayer.Character then
+                for _, item in ipairs(LocalPlayer.Character:GetChildren()) do
+                    if item:IsA("Tool") and item.Name == "Cleave" then
+                        item.Parent = workspace
+                        item:Destroy()
+                    end
+                end
+            end
+        end)
+    end
+})
+
+TrollTab:CreateButton({
+    Name = "Meteor",
+    Callback = function()
+        local tool = getTrollTool("meteor")
+        if not tool then return end
+
+        local remote = tool:FindFirstChild("Activated") or tool:FindFirstChildWhichIsA("RemoteEvent", true)
+        if remote then
+            for _, target in ipairs(getSelectedTargets()) do
+                if target.Character then
+                    local root = target.Character:FindFirstChild("HumanoidRootPart") or target.Character:FindFirstChild("Torso") or target.Character:FindFirstChild("UpperTorso")
+                    if root then
+                        remote:FireServer(root.CFrame)
+                    end
+                end
+            end
+        end
+        task.wait(0.05)
+        pcall(function()
+            tool.Parent = workspace
+            tool:Destroy()
+        end)
+    end
+})
+
+TrollTab:CreateButton({
+    Name = "Kill",
+    Callback = function()
+        local tool = getTrollTool("Cat gun")
+        if not tool then return end
+
+        local inflict = tool:FindFirstChild("GunScript_Server") and tool.GunScript_Server:FindFirstChild("InflictTarget")
+        if inflict then
+            for _, target in ipairs(getSelectedTargets()) do
+                if target.Character then
+                    local hum = target.Character:FindFirstChildOfClass("Humanoid")
+                    local torso = target.Character:FindFirstChild("Torso") or target.Character:FindFirstChild("UpperTorso") or target.Character:FindFirstChild("HumanoidRootPart")
+                    if hum and torso then
+                        inflict:FireServer(hum, torso, 999999, Vector3.zero, 0, 0, false)
+                    end
+                end
+            end
+        end
+        task.wait(0.05)
+        pcall(function()
+            tool.Parent = workspace
+            tool:Destroy()
+        end)
+    end
+})
+
 local BlackListTab = Window:CreateTab("BlackListTool", 4483362458)
 BlackListTab:CreateSection("Blacklist")
 
@@ -978,6 +1149,11 @@ local function updateAllPlayerDropdowns()
         pcall(function()
             BlacklistWhiteListDropdown:Refresh(updatedNames, false)
             BlacklistWhiteListDropdown:Set(currentSelected)
+        end)
+    end
+    if TrollPlayerDropdown and TrollPlayerDropdown.Refresh then
+        pcall(function()
+            TrollPlayerDropdown:Refresh(getTrollPlayerOptions(), false)
         end)
     end
     refreshRemoveToolsDropdown()
