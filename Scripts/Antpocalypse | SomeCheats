@@ -16,10 +16,11 @@ local Window = Rayfield:CreateWindow({
 local KillTab, PlayerTab, WeaponTab, MiscTab = Window:CreateTab("Kill"), Window:CreateTab("Player"), Window:CreateTab("Weapon"), Window:CreateTab("Misc")
 local plrs, rs, uis = game:GetService("Players"), game:GetService("ReplicatedStorage"), game:GetService("UserInputService")
 local lp, mouse = plrs.LocalPlayer, plrs.LocalPlayer:GetMouse()
-local Network = require(rs:WaitForChild("Packages"):WaitForChild("Network") :: ModuleScript)
+local req = (getrenv and getrenv().require) or require
+local Network = req(rs:WaitForChild("Packages"):WaitForChild("Network"))
 
-local kill, heal, firerate, firerateVal, noSpread, infAmmo = false, false, false, 6000, false, false
-local targets, digging, placing, digKey, placeKey = {"Bots", "Players", "Buildings"}, false, false, "T", "G"
+local kill, heal, firerate, firerateVal, noSpread, infAmmo, healBuild = false, false, false, 6000, false, false, false
+local targets = {"Bots", "Players", "Buildings"}
 
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
@@ -35,6 +36,15 @@ end))
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
+local function hasTarget(name)
+    if type(targets) == "table" then
+        for k, v in pairs(targets) do
+            if v == name or (k == name and v == true) then return true end
+        end
+    end
+    return false
+end
+
 local function getDigTarget()
     local char = lp.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -44,7 +54,8 @@ local function getDigTarget()
     local pos = res and res.Position or mouse.Hit.Position
     local mat = res and res.Material or Enum.Material.Ground
     local diff = pos - root.Position
-    return if diff.Magnitude > 9 then root.Position + diff.Unit * 8 else pos, mat
+    local targetPos = if diff.Magnitude > 9 then root.Position + diff.Unit * 8 else pos
+    return targetPos, mat
 end
 
 local function dig(mode)
@@ -57,27 +68,29 @@ KillTab:CreateDropdown({Name = "Target Selector", Options = {"Bots", "Players", 
 
 PlayerTab:CreateToggle({Name = "Insta-Heal", CurrentValue = false, Flag = "InstaHealToggle", Callback = function(v) heal = v end})
 
+WeaponTab:CreateSection("Weapons")
 WeaponTab:CreateToggle({Name = "FirerateBoost", CurrentValue = false, Flag = "FirerateToggle", Callback = function(v) firerate = v end})
 WeaponTab:CreateSlider({Name = "Firerate Value", Range = {100, 10000}, Increment = 100, Suffix = "", CurrentValue = 6000, Flag = "FirerateSlider", Callback = function(v) firerateVal = v end})
 WeaponTab:CreateToggle({Name = "NoSpread", CurrentValue = false, Flag = "NoSpreadToggle", Callback = function(v) noSpread = v end})
 WeaponTab:CreateToggle({Name = "InfAmmo", CurrentValue = false, Flag = "InfAmmoToggle", Callback = function(v) infAmmo = v end})
 
-MiscTab:CreateKeybind({Name = "Mouse Dig", CurrentKeybind = "T", HoldToInteract = true, Flag = "DigKeybind", Callback = function(v) if type(v) == "string" then digKey = v else digging = v end end})
-MiscTab:CreateKeybind({Name = "Mouse Place", CurrentKeybind = "G", HoldToInteract = true, Flag = "PlaceKeybind", Callback = function(v) if type(v) == "string" then placeKey = v else placing = v end end})
+WeaponTab:CreateSection("Buildings")
+WeaponTab:CreateToggle({Name = "Insta Heal Buildings", CurrentValue = false, Flag = "InstaHealBuildingsToggle", Callback = function(v) healBuild = v end})
 
-uis.InputBegan:Connect(function(i, g)
-    if g then return end
-    if i.KeyCode.Name == digKey then digging = true elseif i.KeyCode.Name == placeKey then placing = true end
-end)
-uis.InputEnded:Connect(function(i)
-    if i.KeyCode.Name == digKey then digging = false elseif i.KeyCode.Name == placeKey then placing = false end
-end)
+MiscTab:CreateKeybind({Name = "Mouse Dig", CurrentKeybind = "T", HoldToInteract = false, Flag = "DigKeybind", Callback = function() pcall(dig, "Subtract") end})
+MiscTab:CreateKeybind({Name = "Mouse Place", CurrentKeybind = "G", HoldToInteract = false, Flag = "PlaceKeybind", Callback = function() pcall(dig, "Add") end})
 
 task.spawn(function()
     while true do
         task.wait(0.05)
-        if digging then pcall(dig, "Subtract") end
-        if placing then pcall(dig, "Add") end
+        local d = Rayfield.Flags and Rayfield.Flags["DigKeybind"]
+        local p = Rayfield.Flags and Rayfield.Flags["PlaceKeybind"]
+        if d and d.CurrentKeybind and Enum.KeyCode[d.CurrentKeybind] and uis:IsKeyDown(Enum.KeyCode[d.CurrentKeybind]) then
+            pcall(dig, "Subtract")
+        end
+        if p and p.CurrentKeybind and Enum.KeyCode[p.CurrentKeybind] and uis:IsKeyDown(Enum.KeyCode[p.CurrentKeybind]) then
+            pcall(dig, "Add")
+        end
     end
 end)
 
@@ -93,10 +106,7 @@ task.spawn(function()
         local enemyTeam = myTeamName and ((myTeamName == "Black" and "Red") or (myTeamName == "Red" and "Black"))
         if kill and tool then
             pcall(function()
-                local hasPlrs = table.find(targets, "Players") or targets["Players"]
-                local hasBots = table.find(targets, "Bots") or targets["Bots"]
-                local hasBuilds = table.find(targets, "Buildings") or targets["Buildings"]
-                if hasPlrs then
+                if hasTarget("Players") then
                     for _, p in ipairs(plrs:GetPlayers()) do
                         if p ~= lp and p.Team ~= myTeam and p.Character then
                             local head = p.Character:FindFirstChild("Head") or p.Character:FindFirstChild("HumanoidRootPart")
@@ -107,7 +117,7 @@ task.spawn(function()
                         end
                     end
                 end
-                if hasBots then
+                if hasTarget("Bots") then
                     local f = workspace:FindFirstChild("CharactersSpawned")
                     local npcs = f and f:FindFirstChild("Npcs")
                     if npcs then
@@ -126,7 +136,7 @@ task.spawn(function()
                         end
                     end
                 end
-                if hasBuilds then
+                if hasTarget("Buildings") then
                     local cf = workspace:FindFirstChild("Constructed Items Folder")
                     if cf then
                         for _, uf in ipairs(cf:GetChildren()) do
@@ -175,7 +185,7 @@ task.spawn(function()
                         if t:IsA("Tool") then
                             local cfg = t:FindFirstChild("Config")
                             if cfg and cfg:IsA("ModuleScript") then
-                                local c = require(cfg)
+                                local c = req(cfg)
                                 if noSpread then
                                     c.Spread, c.ShotgunSpread = 0, 0
                                     c.Recoil = {X = 0, Y = 0}
@@ -186,8 +196,8 @@ task.spawn(function()
                                 if firerate then c.FireRate, c.Cooldown, c.Automatic = firerateVal, 0, true end
                             end
                             if infAmmo then
-                                local a = oldNamecall(t, "CurrentAmmo")
-                                if a and a == 0 and not oldNamecall(t, "IsReloading") then
+                                local a = t:GetAttribute("CurrentAmmo")
+                                if a and a == 0 and not t:GetAttribute("IsReloading") then
                                     Network:FireServer("RequestReload", t)
                                 end
                             end
@@ -196,5 +206,27 @@ task.spawn(function()
                 end
             end
         end)
+        if healBuild and char then
+            pcall(function()
+                local cf = workspace:FindFirstChild("Constructed Items Folder")
+                local bp = lp:FindFirstChild("Backpack")
+                local wk = char:FindFirstChild("Worker's Kit") or (bp and bp:FindFirstChild("Worker's Kit")) or tool
+                if cf and wk then
+                    for _, uf in ipairs(cf:GetChildren()) do
+                        for _, item in ipairs(uf:GetChildren()) do
+                            local tTeam = item:GetAttribute("Team")
+                            if not myTeamName or tTeam == myTeamName or uf.Name == tostring(lp.UserId) then
+                                local hum = item:FindFirstChildOfClass("Humanoid")
+                                local hit = item:FindFirstChild("Head") or item:FindFirstChild("Hitbox") or item:FindFirstChild("HumanoidRootPart") or item:FindFirstChildOfClass("BasePart")
+                                if hum and hit and hum.Health < hum.MaxHealth then
+                                    Network:FireServer("ClientHitCharacter", wk, myPos, hit.Position, item, hit, "Melee", (hit.Position - myPos).Unit)
+                                    hum.Health = hum.MaxHealth
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
     end
 end)
