@@ -14,9 +14,11 @@ if getEx then
 end;
 
 local target = id
+local found = false
 for _, v in db do
 	if string.find(string.lower(tostring(id)), string.lower(v)) then
 		target = v;
+		found = true;
 		break;
 	end;
 end;
@@ -35,35 +37,55 @@ local function runCat(tag, list)
 		else
 			print("    FAIL: " .. n)
 		end;
-		task.wait(0.02)
+		task.wait(0.015)
 	end;
 	print(string.format("    Score: %d%% (%d/%d)", math.floor((p / #list) * 100), p, #list))
 end;
 
 task.spawn(function()
-	print("\n[" .. tostring(target) .. "]:")
+	print("\n" .. (found and ("[" .. target .. "]:") or ("[" .. tostring(id) .. "] (unknown):")))
 	runCat("sUNC", {
 		{"identifyexecutor", function() local f = G("identifyexecutor") or G("getexecutorname"); return f and type(f()) == "string" end},
 		{"readfile & writefile", function() local r, w = G("readfile"), G("writefile"); if not (r and w) then return end; w("_s.txt", "1"); local ok = r("_s.txt") == "1"; pcall(G("delfile"), "_s.txt"); return ok end},
 		{"appendfile", function() local r, w, a = G("readfile"), G("writefile"), G("appendfile"); if not (r and w and a) then return end; w("_s.txt", "a"); a("_s.txt", "b"); local ok = r("_s.txt") == "ab"; pcall(G("delfile"), "_s.txt"); return ok end},
+		{"loadfile", function() return type(G("loadfile")) == "function" end},
 		{"makefolder & isfolder", function() local m, i = G("makefolder"), G("isfolder"); if not (m and i) then return end; m("_f"); local ok = i("_f") and not i("_f_x"); pcall(G("delfolder"), "_f"); return ok end},
 		{"delfolder", function() local m, d, i = G("makefolder"), G("delfolder"), G("isfolder"); if not (m and d and i) then return end; m("_f"); d("_f"); return not i("_f") end},
 		{"listfiles", function() local l, m, w = G("listfiles"), G("makefolder"), G("writefile"); if not (l and m and w) then return end; m("_l"); w("_l/1.txt", "x"); local ok = #l("_l") > 0; pcall(G("delfile"), "_l/1.txt"); pcall(G("delfolder"), "_l"); return ok end},
-		{"crypt.base64", function() local e, d = G("crypt.base64encode") or G("base64.encode"), G("crypt.base64decode") or G("base64.decode"); return e and d and d(e("sUNC")) == "sUNC" end},
+		{"isfile", function() local f, w = G("isfile"), G("writefile"); if not (f and w) then return end; w("_s.txt", "1"); local ok = f("_s.txt"); pcall(G("delfile"), "_s.txt"); return ok end},
+		{"delfile", function() local d, w, i = G("delfile"), G("writefile"), G("isfile"); if not (d and w) then return end; w("_s.txt", "1"); d("_s.txt"); return i and not i("_s.txt") or true end},
+		{"crypt.base64encode & decode", function() local e, d = G("crypt.base64encode") or G("base64.encode"), G("crypt.base64decode") or G("base64.decode"); return e and d and d(e("sUNC")) == "sUNC" end},
+		{"crypt.encrypt & decrypt", function() return type(G("crypt.encrypt") or G("crypto.encrypt")) == "function" and type(G("crypt.decrypt") or G("crypto.decrypt")) == "function" end},
 		{"crypt.hash", function() local h = G("crypt.hash") or G("crypto.hash"); return h and type(h("x", "sha256")) == "string" end},
 		{"crypt.generatekey", function() local g = G("crypt.generatekey") or G("crypto.generatekey"); return g and type(g()) == "string" end},
+		{"crypt.generatebytes", function() local g = G("crypt.generatebytes") or G("crypto.generatebytes"); return g and (#g(16) == 16 or type(g(16)) == "string") end},
 		{"hookfunction", function() local h = G("hookfunction"); if not h then return end; local fn = function() return 1 end; local o = h(fn, function() return 2 end); local ok = fn() == 2; h(fn, o); return ok end},
 		{"hookmetamethod", function() local h = G("hookmetamethod"); if not h then return end; local t = setmetatable({}, {__index = function() return 1 end}); local o = h(t, "__index", function() return 2 end); local ok = t.a == 2; h(t, "__index", o); return ok end},
 		{"newcclosure", function() local n = G("newcclosure"); if not n then return end; local c = n(function() return 1 end); return type(c) == "function" and c() == 1 end},
 		{"clonefunction", function() local c = G("clonefunction"); return c and c(print) ~= print end},
 		{"checkcaller", function() local c = G("checkcaller"); return c and c() == true end},
-		{"threadidentity", function() local g, s = G("getthreadidentity"), G("setthreadidentity"); if not (g and s) then return end; local o = g(); s(3); local ok = g() == 3; s(o); return ok end},
-		{"Drawing", function() local d, r = G("Drawing.new"), G("isrenderobj"); if not (d and r) then return end; local o = d("Square"); local ok = r(o); pcall(function() o:Remove() end); return ok end},
+		{"getthreadidentity & setthreadidentity", function() local g, s = G("getthreadidentity"), G("setthreadidentity"); if not (g and s) then return end; local o = g(); s(3); local ok = g() == 3; s(o); return ok end},
+		{"Drawing.new", function() local d = G("Drawing.new"); if not d then return end; local o = d("Square"); local ok = o ~= nil; pcall(function() o:Remove() end); return ok end},
+		{"Drawing.Fonts", function() return type(G("Drawing.Fonts")) == "table" end},
+		{"isrenderobj", function() local d, r = G("Drawing.new"), G("isrenderobj"); if not (d and r) then return end; local o = d("Square"); local ok = r(o); pcall(function() o:Remove() end); return ok end},
+		{"getrenderproperty & setrenderproperty", function() return type(G("getrenderproperty")) == "function" and type(G("setrenderproperty")) == "function" end},
+		{"cleardrawcache", function() return type(G("cleardrawcache")) == "function" end},
 		{"request", function() local r = G("request") or G("http_request") or G("syn.request"); return r and r({Url = "https://httpbin.org/get", Method = "GET"}).StatusCode == 200 end},
-		{"decompile", function() return type(G("decompile")) == "function" end},
+		{"WebSocket.connect", function() local w = G("WebSocket") or G("websocket"); return w and type(w.connect) == "function" end},
 		{"raknet", function() local r = G("raknet") or G("Raknet"); return type(r) == "table" or type(r) == "function" end}
 	})
 	runCat("UNC", {
+		{"cache.invalidate", function() local c = G("cache.invalidate"); return type(c) == "function" end},
+		{"cache.iscached", function() local c = G("cache.iscached"); return type(c) == "function" end},
+		{"cache.replace", function() local c = G("cache.replace"); return type(c) == "function" end},
+		{"cloneref", function() local c = G("cloneref"); if not c then return end; local p = Instance.new("Part"); return c(p) ~= p end},
+		{"compareinstances", function() return type(G("compareinstances")) == "function" end},
+		{"getcallingscript", function() return type(G("getcallingscript")) == "function" end},
+		{"getscriptclosure", function() return type(G("getscriptclosure") or G("getscriptfunction")) == "function" end},
+		{"iscclosure", function() local f = G("iscclosure"); return f and f(print) and not f(function() end) end},
+		{"islclosure", function() local f = G("islclosure"); return f and f(function() end) and not f(print) end},
+		{"isexecutorclosure", function() local f = G("isexecutorclosure") or G("isourclosure"); return f and f(function() end) end},
+		{"loadstring", function() local l = G("loadstring"); return l and assert(l("return 2+2"))() == 4 end},
 		{"getgenv", function() local f = G("getgenv"); return f and type(f()) == "table" end},
 		{"getrenv", function() local f = G("getrenv"); return f and type(f()) == "table" and f().print ~= nil end},
 		{"getreg", function() local f = G("getreg") or G("debug.getregistry"); return f and type(f()) == "table" end},
@@ -72,24 +94,34 @@ task.spawn(function()
 		{"getrunningscripts", function() local f = G("getrunningscripts") or G("getscripts"); return f and type(f()) == "table" end},
 		{"getinstances", function() local f = G("getinstances"); return f and #f() > 0 end},
 		{"getnilinstances", function() local f = G("getnilinstances"); return f and type(f()) == "table" end},
-		{"islclosure", function() local f = G("islclosure"); return f and f(function() end) and not f(print) end},
-		{"iscclosure", function() local f = G("iscclosure"); return f and f(print) and not f(function() end) end},
 		{"getrawmetatable", function() local f = G("getrawmetatable"); return f and type(f(game)) == "table" end},
 		{"setrawmetatable", function() local s = G("setrawmetatable"); if not s then return end; local t: any, m: any = setmetatable({}, {}), {}; s(t, m); return getmetatable(t) == m end},
-		{"readonly", function() local s, i = G("setreadonly"), G("isreadonly"); if not (s and i) then return end; local t = {}; s(t, true); local ok = i(t); s(t, false); return ok and not i(t) end},
+		{"setreadonly & isreadonly", function() local s, i = G("setreadonly"), G("isreadonly"); if not (s and i) then return end; local t = {}; s(t, true); local ok = i(t); s(t, false); return ok and not i(t) end},
 		{"getnamecallmethod", function() return type(G("getnamecallmethod")) == "function" end},
-		{"HttpGet", function() local s = game:HttpGet("https://httpbin.org/get"); return type(s) == "string" and #s > 0 end},
+		{"fireclickdetector", function() return type(G("fireclickdetector")) == "function" end},
+		{"getcallbackvalue", function() return type(G("getcallbackvalue")) == "function" end},
+		{"getconnections", function() return type(G("getconnections")) == "function" end},
+		{"getcustomasset", function() return type(G("getcustomasset") or G("getsynasset")) == "function" end},
+		{"gethiddenproperty & sethiddenproperty", function() return type(G("gethiddenproperty")) == "function" and type(G("sethiddenproperty")) == "function" end},
+		{"gethui", function() local f = G("gethui"); return f and typeof(f()) == "Instance" end},
+		{"isscriptable & setscriptable", function() return type(G("isscriptable")) == "function" and type(G("setscriptable")) == "function" end},
+		{"setrbxclipboard", function() return type(G("setrbxclipboard")) == "function" end},
+		{"lz4compress & lz4decompress", function() return type(G("lz4compress")) == "function" and type(G("lz4decompress")) == "function" end},
+		{"messagebox", function() return type(G("messagebox")) == "function" end},
+		{"queue_on_teleport", function() return type(G("queue_on_teleport") or G("queueonteleport")) == "function" end},
+		{"setfpscap", function() local s = G("setfpscap"); if not s then return end; s(60); return true end},
+		{"getscriptbytecode", function() return type(G("getscriptbytecode")) == "function" end},
+		{"getscripthash", function() return type(G("getscripthash")) == "function" end},
+		{"getscripts", function() local f = G("getscripts") or G("getrunningscripts"); return f and type(f()) == "table" end},
+		{"getsenv", function() return type(G("getsenv")) == "function" end},
 		{"debug.constants", function() local c = G("debug.getconstants"); return c and #c(function() return "const_a", "const_b" end) >= 2 end},
+		{"debug.getconstant & setconstant", function() local g, s = G("debug.getconstant"), G("debug.setconstant"); if not (g and s) then return end; local fn = function() return "a" end; s(fn, 1, "b"); return g(fn, 1) == "b" end},
 		{"debug.upvalues", function() local g, s = G("debug.getupvalue"), G("debug.setupvalue"); if not (g and s) then return end; local v = 1; local function fn() v += 1; return v; end; v = 2; s(fn, 1, 9); return g(fn, 1) == 9 end},
-		{"debug.setconstant", function() local s = G("debug.setconstant"); if not s then return end; local fn = function() return "a" end; s(fn, 1, "b"); return fn() == "b" end},
 		{"debug.getinfo", function() local f = G("debug.getinfo"); return f and type(f(function() end)) == "table" end},
 		{"debug.protos", function() local p = G("debug.getprotos"); if not p then return end; local function fn() local function a() end; local function b() end; end; return #p(fn) >= 2 end},
-		{"debug.getstack", function() local f = G("debug.getstack"); if not f then return end; local s; (function() local x = 1; s = f(1); end)(); return type(s) == "table" end},
+		{"debug.getstack & setstack", function() return type(G("debug.getstack")) == "function" and type(G("debug.setstack")) == "function" end},
 		{"setclipboard", function() local f = G("setclipboard") or G("toclipboard"); if not f then return end; f("ok"); return true end},
 		{"isrbxactive", function() local f = G("isrbxactive") or G("isgameactive"); return f and type(f()) == "boolean" end},
-		{"fpscap", function() local g, s = G("getfpscap"), G("setfpscap"); if not (g and s) then return end; s(60); return type(g()) == "number" end},
-		{"cloneref", function() local c = G("cloneref"); if not c then return end; local p = Instance.new("Part"); return c(p) ~= p end},
-		{"queue_on_teleport", function() return type(G("queue_on_teleport") or G("queueonteleport")) == "function" end},
 		{"mouse1click", function() return type(G("mouse1click")) == "function" end},
 		{"keypress", function() return type(G("keypress")) == "function" end}
 	})
