@@ -1,0 +1,230 @@
+local Rayfield = loadstring(game:HttpGet("https://github.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/raw/refs/heads/main/Rayfield/CustomRayfield.luau"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Evo3D | SomeCheats",
+    LoadingTitle = "Evo3D | SomeCheats",
+    LoadingSubtitle = "By: UnknownSquad",
+    Theme = "Amethyst",
+    Width = 460,
+    Height = 360,
+    Font = "Code",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+local MainTab = Window:CreateTab("Main", 4483362458)
+local FlingTab = Window:CreateTab("Fling", 4483362458)
+
+local lp = game.Players.LocalPlayer
+local plrs = game:GetService("Players")
+local cs = game:GetService("CollectionService")
+local rs = game:GetService("RunService")
+
+local autoEat = false
+local foodType = "Food"
+local visited = {}
+
+local flingTarget = "None"
+local targetFling = false
+local flingAll = false
+
+local function getChar(p)
+    return p.Character or workspace:FindFirstChild(p.Name)
+end
+
+local function getRoot(c)
+    return c and (c.PrimaryPart or c:FindFirstChild("RootPart") or c:FindFirstChild("HumanoidRootPart") or c:FindFirstChildWhichIsA("BasePart"))
+end
+
+local function getPlayerList()
+    local list = {"None", "All Players"}
+    for _, p in ipairs(plrs:GetPlayers()) do
+        if p ~= lp then
+            table.insert(list, p.Name)
+        end
+    end
+    return list
+end
+
+MainTab:CreateDropdown({
+    Name = "Target",
+    Options = {"Food", "Meat"},
+    CurrentOption = {"Food"},
+    MultipleOptions = false,
+    Flag = "FoodType",
+    Callback = function(opt)
+        foodType = typeof(opt) == "table" and opt[1] or opt
+        table.clear(visited)
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Auto-Eat",
+    CurrentValue = false,
+    Flag = "AutoEat",
+    Callback = function(val)
+        autoEat = val
+        table.clear(visited)
+    end
+})
+
+local PlayerDropdown = FlingTab:CreateDropdown({
+    Name = "Select Target",
+    Options = getPlayerList(),
+    CurrentOption = {"None"},
+    MultipleOptions = false,
+    Flag = "FlingPlayer",
+    Callback = function(opt)
+        flingTarget = typeof(opt) == "table" and opt[1] or opt
+        flingAll = flingTarget == "All Players"
+    end
+})
+
+FlingTab:CreateToggle({
+    Name = "Fling",
+    CurrentValue = false,
+    Flag = "FlingToggle",
+    Callback = function(val)
+        targetFling = val
+        if not val then
+            local myChar = getChar(lp)
+            if myChar then
+                local ao = myChar:FindFirstChild("AlignOrientation")
+                if ao then ao.Enabled = true end
+                for _, p in ipairs(myChar:GetDescendants()) do
+                    if p:IsA("BasePart") then
+                        p.CanCollide = (p.Name == "Collisions")
+                        p.AssemblyLinearVelocity = Vector3.zero
+                        p.AssemblyAngularVelocity = Vector3.zero
+                    end
+                end
+            end
+        end
+    end
+})
+
+local function refreshList()
+    pcall(function()
+        local list = getPlayerList()
+        PlayerDropdown.CurrentOption = {"None"}
+        PlayerDropdown:Refresh(list)
+    end)
+end
+
+plrs.PlayerAdded:Connect(refreshList)
+plrs.PlayerRemoving:Connect(refreshList)
+
+task.spawn(function()
+    while true do
+        if autoEat then
+            local char = getChar(lp)
+            local root = getRoot(char)
+            if char and root then
+                local tag = foodType == "Meat" and "Meat" or "Edible"
+                local items = cs:GetTagged(tag)
+                local closest, dist = nil, math.huge
+                for _, v in ipairs(items) do
+                    if not visited[v] and v:IsA("BasePart") and v:IsDescendantOf(workspace) then
+                        local d = (root.Position - v.Position).Magnitude
+                        if d < dist then
+                            dist = d
+                            closest = v
+                        end
+                    end
+                end
+                if closest then
+                    visited[closest] = true
+                    char:PivotTo(CFrame.new(closest.Position))
+                else
+                    table.clear(visited)
+                end
+            end
+        end
+        task.wait(0.2)
+    end
+end)
+
+local function flingPlayer(targetPlr)
+    local myChar = getChar(lp)
+    local tChar = getChar(targetPlr)
+    if not (myChar and tChar) then return end
+
+    local myRoot = getRoot(myChar)
+    local tRoot = getRoot(tChar)
+    if not (myRoot and tRoot) then return end
+
+    local origCF = myChar:GetPivot()
+    local startPos = tRoot.Position
+    local ao = myChar:FindFirstChild("AlignOrientation")
+    if ao then ao.Enabled = false end
+
+    local steppedConn = rs.Stepped:Connect(function()
+        if myChar and myChar.Parent then
+            for _, p in ipairs(myChar:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    p.CanCollide = true
+                end
+            end
+        end
+    end)
+
+    local startT = os.clock()
+    while targetFling and (flingAll or flingTarget == targetPlr.Name) and (os.clock() - startT < 3) do
+        myChar = getChar(lp)
+        tChar = getChar(targetPlr)
+        if not (myChar and tChar and myChar.Parent and tChar.Parent) then break end
+
+        myRoot = getRoot(myChar)
+        tRoot = getRoot(tChar)
+        if not (myRoot and tRoot and myRoot.Parent and tRoot.Parent) then break end
+
+        local distMoved = (tRoot.Position - startPos).Magnitude
+        if distMoved >= 100 or tRoot.AssemblyLinearVelocity.Magnitude >= 200 then
+            break
+        end
+
+        local pred = tRoot.CFrame + (tRoot.AssemblyLinearVelocity * 0.1)
+        myChar:PivotTo(pred * CFrame.Angles(math.rad(math.random(-180, 180)), math.rad(math.random(-180, 180)), math.rad(math.random(-180, 180))))
+        myRoot.AssemblyAngularVelocity = Vector3.new(200000, 200000, 200000)
+        myRoot.AssemblyLinearVelocity = Vector3.new(100000, 100000, 100000)
+
+        rs.Heartbeat:Wait()
+    end
+
+    steppedConn:Disconnect()
+
+    if myChar and myChar.Parent then
+        if ao then ao.Enabled = true end
+        for _, p in ipairs(myChar:GetDescendants()) do
+            if p:IsA("BasePart") then
+                p.CanCollide = (p.Name == "Collisions")
+                p.AssemblyLinearVelocity = Vector3.zero
+                p.AssemblyAngularVelocity = Vector3.zero
+            end
+        end
+        myChar:PivotTo(origCF)
+    end
+
+    task.wait(0.15)
+end
+
+task.spawn(function()
+    while true do
+        if targetFling then
+            if flingAll then
+                for _, p in ipairs(plrs:GetPlayers()) do
+                    if not targetFling or not flingAll then break end
+                    if p ~= lp and getChar(p) and getRoot(getChar(p)) then
+                        flingPlayer(p)
+                    end
+                end
+            elseif flingTarget ~= "None" then
+                local p = plrs:FindFirstChild(flingTarget)
+                if p and getChar(p) and getRoot(getChar(p)) then
+                    flingPlayer(p)
+                end
+            end
+        end
+        task.wait(0.1)
+    end
+end)
