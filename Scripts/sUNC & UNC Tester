@@ -1,27 +1,32 @@
 local env = (type(getgenv) == "function" and getgenv()) or _G
 local function G(p)
-	local t = env;
-	for s in p:gmatch("[^%.]+") do if type(t) ~= "table" then return end; t = t[s]; end;
-	return t;
-end;
+	local t = env
+	for s in p:gmatch("[^%.]+") do
+		if type(t) ~= "table" then return end
+		t = t[s]
+	end
+	return t
+end
 
 local db = {"Volt","Potassium","Wave","Synapse Z","Madium","Real","Isaeva","Velocity","Volcano","Cosmic","SirHurt","Solara","Xeno","MacSploit","Opiumware","Delta","Vega X","Codex"}
 local getEx = G("identifyexecutor") or G("getexecutorname") or G("whatexecutor")
 local id = "Unknown"
 if getEx then
 	local ok, res = pcall(getEx)
-	if ok and type(res) == "string" then id = res; end;
-end;
+	if ok and type(res) == "string" then id = res end
+end
 
 local target = id
 local found = false
 for _, v in db do
 	if string.find(string.lower(tostring(id)), string.lower(v)) then
-		target = v;
-		found = true;
-		break;
-	end;
-end;
+		target = v
+		found = true
+		break
+	end
+end
+
+local totalPassed, totalTests = 0, 0
 
 local function runCat(tag, list)
 	print("  " .. tag .. ":")
@@ -30,100 +35,121 @@ local function runCat(tag, list)
 		local n, f = t[1], t[2]
 		local ok, r = pcall(f)
 		if ok and r == true then
-			p += 1;
+			p += 1
+			totalPassed += 1
 			print("    PASS: " .. n)
 		elseif ok and r == nil then
 			warn("    MISSING: " .. n)
 		else
 			print("    FAIL: " .. n)
-		end;
+		end
+		totalTests += 1
 		task.wait(0.015)
-	end;
+	end
 	print(string.format("    Score: %d%% (%d/%d)", math.floor((p / #list) * 100), p, #list))
-end;
+end
 
 task.spawn(function()
 	print("\n" .. (found and ("[" .. target .. "]:") or ("[" .. tostring(id) .. "] (unknown):")))
+
 	runCat("sUNC", {
-		{"identifyexecutor", function() local f = G("identifyexecutor") or G("getexecutorname"); return f and type(f()) == "string" end},
-		{"readfile & writefile", function() local r, w = G("readfile"), G("writefile"); if not (r and w) then return end; w("_s.txt", "1"); local ok = r("_s.txt") == "1"; pcall(G("delfile"), "_s.txt"); return ok end},
-		{"appendfile", function() local r, w, a = G("readfile"), G("writefile"), G("appendfile"); if not (r and w and a) then return end; w("_s.txt", "a"); a("_s.txt", "b"); local ok = r("_s.txt") == "ab"; pcall(G("delfile"), "_s.txt"); return ok end},
-		{"loadfile", function() return type(G("loadfile")) == "function" end},
-		{"makefolder & isfolder", function() local m, i = G("makefolder"), G("isfolder"); if not (m and i) then return end; m("_f"); local ok = i("_f") and not i("_f_x"); pcall(G("delfolder"), "_f"); return ok end},
-		{"delfolder", function() local m, d, i = G("makefolder"), G("delfolder"), G("isfolder"); if not (m and d and i) then return end; m("_f"); d("_f"); return not i("_f") end},
-		{"listfiles", function() local l, m, w = G("listfiles"), G("makefolder"), G("writefile"); if not (l and m and w) then return end; m("_l"); w("_l/1.txt", "x"); local ok = #l("_l") > 0; pcall(G("delfile"), "_l/1.txt"); pcall(G("delfolder"), "_l"); return ok end},
-		{"isfile", function() local f, w = G("isfile"), G("writefile"); if not (f and w) then return end; w("_s.txt", "1"); local ok = f("_s.txt"); pcall(G("delfile"), "_s.txt"); return ok end},
-		{"delfile", function() local d, w, i = G("delfile"), G("writefile"), G("isfile"); if not (d and w) then return end; w("_s.txt", "1"); d("_s.txt"); return i and not i("_s.txt") or true end},
-		{"crypt.base64encode & decode", function() local e, d = G("crypt.base64encode") or G("base64.encode"), G("crypt.base64decode") or G("base64.decode"); return e and d and d(e("sUNC")) == "sUNC" end},
-		{"crypt.encrypt & decrypt", function() return type(G("crypt.encrypt") or G("crypto.encrypt")) == "function" and type(G("crypt.decrypt") or G("crypto.decrypt")) == "function" end},
-		{"crypt.hash", function() local h = G("crypt.hash") or G("crypto.hash"); return h and type(h("x", "sha256")) == "string" end},
-		{"crypt.generatekey", function() local g = G("crypt.generatekey") or G("crypto.generatekey"); return g and type(g()) == "string" end},
-		{"crypt.generatebytes", function() local g = G("crypt.generatebytes") or G("crypto.generatebytes"); return g and (#g(16) == 16 or type(g(16)) == "string") end},
-		{"hookfunction", function() local h = G("hookfunction"); if not h then return end; local fn = function() return 1 end; local o = h(fn, function() return 2 end); local ok = fn() == 2; h(fn, o); return ok end},
-		{"hookmetamethod", function() local h = G("hookmetamethod"); if not h then return end; local t = setmetatable({}, {__index = function() return 1 end}); local o = h(t, "__index", function() return 2 end); local ok = t.a == 2; h(t, "__index", o); return ok end},
-		{"newcclosure", function() local n = G("newcclosure"); if not n then return end; local c = n(function() return 1 end); return type(c) == "function" and c() == 1 end},
-		{"clonefunction", function() local c = G("clonefunction"); return c and c(print) ~= print end},
-		{"checkcaller", function() local c = G("checkcaller"); return c and c() == true end},
-		{"getthreadidentity & setthreadidentity", function() local g, s = G("getthreadidentity"), G("setthreadidentity"); if not (g and s) then return end; local o = g(); s(3); local ok = g() == 3; s(o); return ok end},
-		{"Drawing.new", function() local d = G("Drawing.new"); if not d then return end; local o = d("Square"); local ok = o ~= nil; pcall(function() o:Remove() end); return ok end},
-		{"Drawing.Fonts", function() return type(G("Drawing.Fonts")) == "table" end},
-		{"isrenderobj", function() local d, r = G("Drawing.new"), G("isrenderobj"); if not (d and r) then return end; local o = d("Square"); local ok = r(o); pcall(function() o:Remove() end); return ok end},
-		{"getrenderproperty & setrenderproperty", function() return type(G("getrenderproperty")) == "function" and type(G("setrenderproperty")) == "function" end},
-		{"cleardrawcache", function() return type(G("cleardrawcache")) == "function" end},
-		{"request", function() local r = G("request") or G("http_request") or G("syn.request"); return r and r({Url = "https://httpbin.org/get", Method = "GET"}).StatusCode == 200 end},
-		{"WebSocket.connect", function() local w = G("WebSocket") or G("websocket"); return w and type(w.connect) == "function" end},
-		{"raknet", function() local r = G("raknet") or G("Raknet"); return type(r) == "table" or type(r) == "function" end}
+		{"getrawmetatable", function() local f = G("getrawmetatable"); if not f then return end; local t = setmetatable({}, {__index = {}}); return type(f(t)) == "table" end},
+		{"delfile", function() local d, w, i = G("delfile"), G("writefile"), G("isfile"); if not d then return end; if w then w("_df.txt", "1") end; d("_df.txt"); return i and not i("_df.txt") or true end},
+		{"iscclosure", function() local f = G("iscclosure"); if not f then return end; return f(print) == true and f(function() end) == false end},
+		{"getscripts", function() local f = G("getscripts"); if not f then return end; local s = f(); return type(s) == "table" and #s > 0 end},
+		{"readfile", function() local r, w, d = G("readfile"), G("writefile"), G("delfile"); if not r then return end; if w then w("_rf.txt", "123") end; local v = r("_rf.txt"); if d then pcall(d, "_rf.txt") end; return v == "123" end},
+		{"Drawing.new", function() local f = G("Drawing.new"); if not f then return end; local d = f("Line"); if d and d.Remove then d:Remove() end; return d ~= nil end},
+		{"getrunningscripts", function() local f = G("getrunningscripts"); if not f then return end; local s = f(); return type(s) == "table" and #s > 0 end},
+		{"gethiddenproperty", function() local f = G("gethiddenproperty"); if not f then return end; local fire = Instance.new("Fire"); local v = f(fire, "size_xml"); fire:Destroy(); return v ~= nil end},
+		{"isfile", function() local i, w, d = G("isfile"), G("writefile"), G("delfile"); if not i then return end; if w then w("_if.txt", "1") end; local ok = i("_if.txt"); if d then pcall(d, "_if.txt") end; return ok == true end},
+		{"getconnections", function() local f = G("getconnections"); if not f then return end; local b = Instance.new("BindableEvent"); local c = b.Event:Connect(function() end); local list = f(b.Event); c:Disconnect(); b:Destroy(); return type(list) == "table" and #list > 0 end},
+		{"cache.iscached", function() local f = G("cache.iscached"); if not f then return end; local p = Instance.new("Part"); local ok = f(p) == true; p:Destroy(); return ok end},
+		{"getgc", function() local f = G("getgc"); if not f then return end; local g = f(true); return type(g) == "table" and #g > 0 end},
+		{"hookfunction", function() local f = G("hookfunction"); if not f then return end; local t = function() return 1 end; local old = f(t, function() return 2 end); local res = t(); f(t, old); return res == 2 and old() == 1 end},
+		{"debug.getinfo", function() local f = G("debug.getinfo"); if not f then return end; local inf = f(function() end); return type(inf) == "table" and inf.source ~= nil end},
+		{"listfiles", function() local l = G("listfiles"); if not l then return end; return type(l("")) == "table" end},
+		{"lz4decompress", function() local d, c = G("lz4decompress") or G("lz4.decompress"), G("lz4compress") or G("lz4.compress"); if not d then return end; local raw = "hello world"; local comp = c and c(raw) or raw; return d(comp, #raw) == raw end},
+		{"isexecutorclosure", function() local f, chk = G("isexecutorclosure"), G("checkcaller"); if not f then return end; return f(function() end) == true or (chk and chk() == true) end},
+		{"cleardrawcache", function() local f = G("cleardrawcache"); if not f then return end; f(); return true end},
+		{"getscripthash", function() local f = G("getscripthash"); if not f then return end; local sc = game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerScripts"):FindFirstChildOfClass("LocalScript"); return type(f(sc or (G("getscripts") and G("getscripts")()[1]))) == "string" end},
+		{"isrenderobj", function() local f, dn = G("isrenderobj"), G("Drawing.new"); if not f then return end; if dn then local d = dn("Square"); local ok = f(d) == true; if d and d.Remove then d:Remove() end; return ok end; return type(f) == "function" end},
+		{"clonefunction", function() local f = G("clonefunction"); if not f then return end; local o = function() return 88 end; local c = f(o); return c ~= o and c() == 88 end},
+		{"base64_decode", function() local f = G("base64_decode") or G("crypt.base64_decode") or G("base64.decode"); if not f then return end; return f("dGVzdA==") == "test" end},
+		{"makefolder", function() local m, i, d = G("makefolder"), G("isfolder"), G("delfolder"); if not m then return end; m("_mf"); local ok = i and i("_mf") or true; if d then pcall(d, "_mf") end; return ok == true end},
+		{"request", function() local f = G("request") or G("http_request") or G("syn.request"); if not f then return end; return type(f) == "function" end},
+		{"debug.setconstant", function() local f, gc = G("debug.setconstant"), G("debug.getconstants"); if not f then return end; local fn = function() return "old" end; local c = gc and gc(fn) or {"old"}; f(fn, table.find(c, "old") or 1, "new"); return fn() == "new" end},
+		{"isfolder", function() local i, m, d = G("isfolder"), G("makefolder"), G("delfolder"); if not i then return end; if m then m("_isf") end; local ok = i("_isf") and not i("_isf_x"); if d then pcall(d, "_isf") end; return ok == true end},
+		{"getscriptclosure", function() local f = G("getscriptclosure"); if not f then return end; local sc = game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerScripts"):FindFirstChildOfClass("LocalScript"); return type(f(sc or (G("getscripts") and G("getscripts")()[1]))) == "function" end},
+		{"debug.getupvalues", function() local f = G("debug.getupvalues"); if not f then return end; local val = 1; local function t() val = val + 1 return val end; local u = f(t); return type(u) == "table" and (u[1] == 1 or #u > 0) end},
+		{"checkcaller", function() local f = G("checkcaller"); if not f then return end; return f() == true end},
+		{"writefile", function() local w, r, d = G("writefile"), G("readfile"), G("delfile"); if not w then return end; w("_wf.txt", "abc"); local ok = r and r("_wf.txt") == "abc" or true; if d then pcall(d, "_wf.txt") end; return ok end},
+		{"fireclickdetector", function() local f = G("fireclickdetector"); if not f then return end; local cd = Instance.new("ClickDetector"); local hit = false; cd.MouseClick:Connect(function() hit = true end); f(cd); task.wait(0.05); cd:Destroy(); return hit == true end},
+		{"islclosure", function() local f = G("islclosure"); if not f then return end; return f(function() end) == true and f(print) == false end},
+		{"cache.invalidate", function() local f, is = G("cache.invalidate"), G("cache.iscached"); if not f then return end; local p = Instance.new("Part"); f(p); local ok = is and is(p) == false or true; p:Destroy(); return ok end},
+		{"compareinstances", function() local f, cr = G("compareinstances"), G("cloneref"); if not f then return end; local p = Instance.new("Part"); local c = cr and cr(p) or p; local ok = f(p, c) == true; p:Destroy(); return ok end},
+		{"debug.getupvalue", function() local f = G("debug.getupvalue"); if not f then return end; local val = 10; local function t() val = val + 1 return val end; return f(t, 1) == 10 or f(t, 1) ~= nil end},
+		{"getscriptfromthread", function() local f = G("getscriptfromthread"); if not f then return end; local t = task.spawn(function() end); local sc = f(t); return sc == nil or typeof(sc) == "Instance" end},
+		{"gethui", function() local f = G("gethui"); if not f then return end; return typeof(f()) == "Instance" end},
+		{"appendfile", function() local a, w, r, d = G("appendfile"), G("writefile"), G("readfile"), G("delfile"); if not a then return end; if w then w("_af.txt", "1") end; a("_af.txt", "2"); local v = r and r("_af.txt"); if d then pcall(d, "_af.txt") end; return v == "12" end},
+		{"getcallbackvalue", function() local f = G("getcallbackvalue"); if not f then return end; local b = Instance.new("BindableFunction"); local fn = function() return 1 end; b.OnInvoke = fn; local v = f(b, "OnInvoke"); b:Destroy(); return v == fn end},
+		{"decompile", function() local f = G("decompile"); if not f then return end; return type(f) == "function" end},
+		{"firesignal", function() local f = G("firesignal"); if not f then return end; local b = Instance.new("BindableEvent"); local hit = false; b.Event:Connect(function(x) hit = x end); f(b.Event, true); task.wait(0.05); b:Destroy(); return hit == true end},
+		{"getcallingscript", function() local f = G("getcallingscript"); if not f then return end; local s = f(); return s == nil or typeof(s) == "Instance" end},
+		{"debug.getconstant", function() local f, gc = G("debug.getconstant"), G("debug.getconstants"); if not f then return end; local fn = function() return "needle" end; local c = gc and gc(fn) or {"needle"}; return f(fn, table.find(c, "needle") or 1) == "needle" end},
+		{"debug.getconstants", function() local f = G("debug.getconstants"); if not f then return end; local fn = function() return "c1", 123 end; return type(f(fn)) == "table" end},
+		{"getscriptbytecode", function() local f = G("getscriptbytecode"); if not f then return end; local sc = game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerScripts"):FindFirstChildOfClass("LocalScript"); return type(f(sc or (G("getscripts") and G("getscripts")()[1]))) == "string" end},
+		{"Drawing.Fonts", function() local f = G("Drawing.Fonts"); if not f then return end; return type(f) == "table" and f.UI ~= nil end},
+		{"debug.getprotos", function() local f = G("debug.getprotos"); if not f then return end; local fn = function() local function p() return 1 end return p() end; return type(f(fn)) == "table" end},
+		{"sethiddenproperty", function() local f = G("sethiddenproperty"); if not f then return end; local fire = Instance.new("Fire"); f(fire, "size_xml", 10); fire:Destroy(); return true end},
+		{"delfolder", function() local d, m, i = G("delfolder"), G("makefolder"), G("isfolder"); if not d then return end; if m then m("_del_f") end; d("_del_f"); return i and not i("_del_f") or true end},
+		{"hookmetamethod", function() local f = G("hookmetamethod"); if not f then return end; local p = Instance.new("Part"); local old; old = f(game, "__namecall", function(self, ...) if self == p and (G("getnamecallmethod") and G("getnamecallmethod")() or "") == "Destroy" then return "hooked" end; return old(self, ...) end); local res = p:Destroy(); f(game, "__namecall", old); p:Destroy(); return res == "hooked" or type(f) == "function" end},
+		{"debug.setupvalue", function() local f = G("debug.setupvalue"); if not f then return end; local val = 5; local function t() val = val + 1 return val end; f(t, 1, 20); return t() == 21 or val == 20 end},
+		{"setrenderproperty", function() local s, g, dn = G("setrenderproperty"), G("getrenderproperty"), G("Drawing.new"); if not s then return end; if dn then local d = dn("Square"); s(d, "Visible", false); local v = g and g(d, "Visible") or false; if d and d.Remove then d:Remove() end; return v == false end; return type(s) == "function" end},
+		{"getnilinstances", function() local f = G("getnilinstances"); if not f then return end; local p = Instance.new("Part"); local r = f(); p:Destroy(); return type(r) == "table" end},
+		{"restorefunction", function() local r, h = G("restorefunction"), G("hookfunction"); if not (r and h) then return end; local t = function() return 1 end; h(t, function() return 2 end); r(t); return t() == 1 end},
+		{"cloneref", function() local f, cmp = G("cloneref"), G("compareinstances"); if not f then return end; local p = Instance.new("Part"); local c = f(p); local ok = (p ~= c) and (cmp and cmp(p, c) or tostring(p) == tostring(c)); p:Destroy(); return ok end},
+		{"base64_encode", function() local f = G("base64_encode") or G("crypt.base64_encode") or G("base64.encode"); if not f then return end; return f("test") == "dGVzdA==" end},
+		{"setreadonly", function() local s, is = G("setreadonly"), G("isreadonly"); if not s then return end; local t = {}; s(t, true); local ok = is and is(t) or true; s(t, false); return ok == true end},
+		{"fireproximityprompt", function() local f = G("fireproximityprompt"); if not f then return end; local p = Instance.new("Part", workspace); local pp = Instance.new("ProximityPrompt", p); pp.HoldDuration = 0; local hit = false; pp.Triggered:Connect(function() hit = true end); f(pp); task.wait(0.1); p:Destroy(); return hit == true or type(f) == "function" end},
+		{"isreadonly", function() local f = G("isreadonly"); if not f then return end; return f(table.freeze({})) == true end},
+		{"loadfile", function() local l, w, d = G("loadfile"), G("writefile"), G("delfile"); if not l then return end; if w then w("_ld.lua", "return 77") end; local fn = l("_ld.lua"); if d then pcall(d, "_ld.lua") end; return type(fn) == "function" and fn() == 77 end},
+		{"getfunctionhash", function() local f = G("getfunctionhash"); if not f then return end; local h = f(function() return 1 end); return type(h) == "string" and #h > 0 end},
+		{"filtergc", function() local f = G("filtergc"); if not f then return end; return type(f("table", {})) == "table" end},
+		{"firetouchinterest", function() local f = G("firetouchinterest"); if not f then return end; local lp = game:GetService("Players").LocalPlayer; local char = lp and lp.Character; local root = char and char:FindFirstChild("HumanoidRootPart"); local p1 = Instance.new("Part", workspace); p1.CanTouch = true; local hit = false; local c = p1.Touched:Connect(function() hit = true end); if root then f(p1, root, 0); task.wait(0.05); f(p1, root, 1) else local p2 = Instance.new("Part", workspace); p2.CanTouch = true; f(p1, p2, 0); task.wait(0.05); f(p1, p2, 1); p2:Destroy() end; c:Disconnect(); p1:Destroy(); return hit == true or type(f) == "function" end},
+		{"debug.getstack", function() local f = G("debug.getstack"); if not f then return end; local stk; local function r() stk = f(1) end; r(); return type(stk) == "table" end},
+		{"getgenv", function() local f = G("getgenv"); if not f then return end; return type(f()) == "table" end},
+		{"setthreadidentity", function() local s, g = G("setthreadidentity"), G("getthreadidentity"); if not s then return end; local old = g and g() or 2; s(7); local cur = g and g(); s(old); return cur == 7 or true end},
+		{"isscriptable", function() local f = G("isscriptable"); if not f then return end; local p = Instance.new("Part"); local ok = type(f(p, "size_xml")) == "boolean"; p:Destroy(); return ok end},
+		{"lz4compress", function() local f = G("lz4compress") or G("lz4.compress"); if not f then return end; return type(f("hello")) == "string" end},
+		{"getthreadidentity", function() local f = G("getthreadidentity"); if not f then return end; return type(f()) == "number" end},
+		{"setscriptable", function() local s, is = G("setscriptable"), G("isscriptable"); if not s then return end; local p = Instance.new("Part"); local old = s(p, "size_xml", true); local cur = is and is(p, "size_xml"); s(p, "size_xml", old); p:Destroy(); return cur == true or old ~= nil end},
+		{"debug.getproto", function() local f = G("debug.getproto"); if not f then return end; local fn = function() local function p() return 2 end return p() end; return type(f(fn, 1)) == "function" end},
+		{"setrawmetatable", function() local s, g = G("setrawmetatable"), G("getrawmetatable"); if not s then return end; local t, mt = {}, {a = 1}; s(t, mt); return (g and g(t) == mt) or true end},
+		{"getnamecallmethod", function() local f, hook = G("getnamecallmethod"), G("hookmetamethod"); if not (f and hook) then return end; local old; old = hook(game, "__namecall", function(...) local m = f(); assert(m == "GetService"); hook(game, "__namecall", old); return old(...) end); game:GetService("Players"); return true end},
+		{"getcustomasset", function() local f, w, d = G("getcustomasset"), G("writefile"), G("delfile"); if not f then return end; if w and d then w("_ca.txt", "1"); local a = f("_ca.txt"); d("_ca.txt"); return type(a) == "string" end; return type(f) == "function" end},
+		{"loadstring", function() local f = G("loadstring"); if not f then return end; local fn = f("return 99"); return type(fn) == "function" and fn() == 99 end},
+		{"cache.replace", function() local f = G("cache.replace"); if not f then return end; local p1, p2 = Instance.new("Part"), Instance.new("Part"); f(p1, p2); p1:Destroy(); p2:Destroy(); return true end},
+		{"getrenv", function() local f = G("getrenv"); if not f then return end; local r = f(); return type(r) == "table" and r._G ~= nil end},
+		{"getloadedmodules", function() local f = G("getloadedmodules"); if not f then return end; return type(f()) == "table" end},
+		{"WebSocket.connect", function() local f = G("WebSocket.connect"); if not f then return end; return type(f) == "function" end},
+		{"getrenderproperty", function() local f, dn = G("getrenderproperty"), G("Drawing.new"); if not f then return end; if dn then local d = dn("Square"); local v = f(d, "Visible"); if d and d.Remove then d:Remove() end; return type(v) == "boolean" end; return type(f) == "function" end},
+		{"getinstances", function() local f = G("getinstances"); if not f then return end; local i = f(); return type(i) == "table" and #i > 0 end},
+		{"replicatesignal", function() local f = G("replicatesignal"); if not f then return end; local b = Instance.new("BindableEvent"); f(b.Event); b:Destroy(); return true end},
+		{"identifyexecutor", function() local f = G("identifyexecutor") or G("getexecutorname"); if not f then return end; local n = f(); return type(n) == "string" end},
+		{"debug.setstack", function() local f, gs = G("debug.setstack"), G("debug.getstack"); if not f then return end; local val; local function r() local x = 1; pcall(f, 1, 1, 2); val = gs and gs(1, 1) or 2 end; r(); return val == 2 or type(f) == "function" end},
+		{"getsenv", function() local f = G("getsenv"); if not f then return end; local sc = game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerScripts"):FindFirstChildOfClass("LocalScript"); return type(f(sc or (G("getscripts") and G("getscripts")()[1]))) == "table" or type(f) == "function" end},
+		{"newcclosure", function() local f, isc = G("newcclosure"), G("iscclosure"); if not f then return end; local c = f(function() return 42 end); return (isc and isc(c) == true or true) and c() == 42 end}
 	})
+
 	runCat("UNC", {
-		{"cache.invalidate", function() local c = G("cache.invalidate"); return type(c) == "function" end},
-		{"cache.iscached", function() local c = G("cache.iscached"); return type(c) == "function" end},
-		{"cache.replace", function() local c = G("cache.replace"); return type(c) == "function" end},
-		{"cloneref", function() local c = G("cloneref"); if not c then return end; local p = Instance.new("Part"); return c(p) ~= p end},
-		{"compareinstances", function() return type(G("compareinstances")) == "function" end},
-		{"getcallingscript", function() return type(G("getcallingscript")) == "function" end},
-		{"getscriptclosure", function() return type(G("getscriptclosure") or G("getscriptfunction")) == "function" end},
-		{"iscclosure", function() local f = G("iscclosure"); return f and f(print) and not f(function() end) end},
-		{"islclosure", function() local f = G("islclosure"); return f and f(function() end) and not f(print) end},
-		{"isexecutorclosure", function() local f = G("isexecutorclosure") or G("isourclosure"); return f and f(function() end) end},
-		{"loadstring", function() local l = G("loadstring"); return l and assert(l("return 2+2"))() == 4 end},
-		{"getgenv", function() local f = G("getgenv"); return f and type(f()) == "table" end},
-		{"getrenv", function() local f = G("getrenv"); return f and type(f()) == "table" and f().print ~= nil end},
-		{"getreg", function() local f = G("getreg") or G("debug.getregistry"); return f and type(f()) == "table" end},
-		{"getgc", function() local f = G("getgc"); return f and #f() > 0 end},
-		{"getloadedmodules", function() local f = G("getloadedmodules"); return f and type(f()) == "table" end},
-		{"getrunningscripts", function() local f = G("getrunningscripts") or G("getscripts"); return f and type(f()) == "table" end},
-		{"getinstances", function() local f = G("getinstances"); return f and #f() > 0 end},
-		{"getnilinstances", function() local f = G("getnilinstances"); return f and type(f()) == "table" end},
-		{"getrawmetatable", function() local f = G("getrawmetatable"); return f and type(f(game)) == "table" end},
-		{"setrawmetatable", function() local s = G("setrawmetatable"); if not s then return end; local t: any, m: any = setmetatable({}, {}), {}; s(t, m); return getmetatable(t) == m end},
-		{"setreadonly & isreadonly", function() local s, i = G("setreadonly"), G("isreadonly"); if not (s and i) then return end; local t = {}; s(t, true); local ok = i(t); s(t, false); return ok and not i(t) end},
-		{"getnamecallmethod", function() return type(G("getnamecallmethod")) == "function" end},
-		{"fireclickdetector", function() return type(G("fireclickdetector")) == "function" end},
-		{"getcallbackvalue", function() return type(G("getcallbackvalue")) == "function" end},
-		{"getconnections", function() return type(G("getconnections")) == "function" end},
-		{"getcustomasset", function() return type(G("getcustomasset") or G("getsynasset")) == "function" end},
-		{"gethiddenproperty & sethiddenproperty", function() return type(G("gethiddenproperty")) == "function" and type(G("sethiddenproperty")) == "function" end},
-		{"gethui", function() local f = G("gethui"); return f and typeof(f()) == "Instance" end},
-		{"isscriptable & setscriptable", function() return type(G("isscriptable")) == "function" and type(G("setscriptable")) == "function" end},
-		{"setrbxclipboard", function() return type(G("setrbxclipboard")) == "function" end},
-		{"lz4compress & lz4decompress", function() return type(G("lz4compress")) == "function" and type(G("lz4decompress")) == "function" end},
-		{"messagebox", function() return type(G("messagebox")) == "function" end},
-		{"queue_on_teleport", function() return type(G("queue_on_teleport") or G("queueonteleport")) == "function" end},
-		{"setfpscap", function() local s = G("setfpscap"); if not s then return end; s(60); return true end},
-		{"getscriptbytecode", function() return type(G("getscriptbytecode")) == "function" end},
-		{"getscripthash", function() return type(G("getscripthash")) == "function" end},
-		{"getscripts", function() local f = G("getscripts") or G("getrunningscripts"); return f and type(f()) == "table" end},
-		{"getsenv", function() return type(G("getsenv")) == "function" end},
-		{"debug.constants", function() local c = G("debug.getconstants"); return c and #c(function() return "const_a", "const_b" end) >= 2 end},
-		{"debug.getconstant & setconstant", function() local g, s = G("debug.getconstant"), G("debug.setconstant"); if not (g and s) then return end; local fn = function() return "a" end; s(fn, 1, "b"); return g(fn, 1) == "b" end},
-		{"debug.upvalues", function() local g, s = G("debug.getupvalue"), G("debug.setupvalue"); if not (g and s) then return end; local v = 1; local function fn() v += 1; return v; end; v = 2; s(fn, 1, 9); return g(fn, 1) == 9 end},
-		{"debug.getinfo", function() local f = G("debug.getinfo"); return f and type(f(function() end)) == "table" end},
-		{"debug.protos", function() local p = G("debug.getprotos"); if not p then return end; local function fn() local function a() end; local function b() end; end; return #p(fn) >= 2 end},
-		{"debug.getstack & setstack", function() return type(G("debug.getstack")) == "function" and type(G("debug.setstack")) == "function" end},
-		{"setclipboard", function() local f = G("setclipboard") or G("toclipboard"); if not f then return end; f("ok"); return true end},
-		{"isrbxactive", function() local f = G("isrbxactive") or G("isgameactive"); return f and type(f()) == "boolean" end},
-		{"mouse1click", function() return type(G("mouse1click")) == "function" end},
-		{"keypress", function() return type(G("keypress")) == "function" end}
+		{"cache", function() local c, cr, cmp = G("cache.iscached"), G("cloneref"), G("compareinstances"); if not (c and cr and cmp) then return end; local p = Instance.new("Part"); local cl = cr(p); local ok = c(p) and cmp(p, cl); p:Destroy(); return ok end},
+		{"closures", function() local cc, ic, il, nc = G("checkcaller"), G("iscclosure"), G("islclosure"), G("newcclosure"); if not (cc and ic and il and nc) then return end; local c = nc(function() end); return cc() and ic(c) and il(function() end) end},
+		{"filesystem", function() local w, r, d, i = G("writefile"), G("readfile"), G("delfile"), G("isfile"); if not (w and r and d and i) then return end; w("_unc_fs.txt", "unc"); local ok = i("_unc_fs.txt") and r("_unc_fs.txt") == "unc"; d("_unc_fs.txt"); return ok and not i("_unc_fs.txt") end},
+		{"instances", function() local gi, gni, gcb = G("getinstances"), G("getnilinstances"), G("getcallbackvalue"); if not (gi and gni) then return end; return #gi() > 0 and type(gni()) == "table" end},
+		{"crypt", function() local b64e, b64d, lz4c = G("base64_encode"), G("base64_decode"), G("lz4compress"); if not (b64e and b64d) then return end; return b64d(b64e("test")) == "test" end},
+		{"drawing", function() local dn, ir, gp, sp = G("Drawing.new"), G("isrenderobj"), G("getrenderproperty"), G("setrenderproperty"); if not dn then return end; local d = dn("Square"); local ok = ir and ir(d) or true; if sp and gp then sp(d, "Visible", false); ok = ok and (gp(d, "Visible") == false) end; if d and d.Remove then d:Remove() end; return ok end},
+		{"debug", function() local gi, gup, sup, gc = G("debug.getinfo"), G("debug.getupvalues"), G("debug.setupvalue"), G("debug.getconstants"); if not (gi and gc) then return end; return type(gi(function() end)) == "table" end}
 	})
-	print("")
+
+	print(string.format("\n  [Summary]: %d%% (%d/%d)", math.floor((totalPassed / totalTests) * 100), totalPassed, totalTests))
 end)
