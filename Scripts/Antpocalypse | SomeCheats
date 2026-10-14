@@ -1,5 +1,5 @@
 local Rayfield = loadstring(game:HttpGet("https://github.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/raw/refs/heads/main/Rayfield/CustomRayfield.luau"))()
-loadstring(game:HttpGet("https://gist.github.com/UnknownDeveloper-sqd/6b45501daf7aeeaf96f746684591f301/raw/1af59e70343e582948c62f987eb1c4026a052dd6/Script"))()
+pcall(function() loadstring(game:HttpGet("https://gist.github.com/UnknownDeveloper-sqd/6b45501daf7aeeaf96f746684591f301/raw/1af59e70343e582948c62f987eb1c4026a052dd6/Script"))() end)
 
 local Window = Rayfield:CreateWindow({
     Name = "Antpocalypse | SomeCheats",
@@ -13,6 +13,10 @@ local Window = Rayfield:CreateWindow({
     KeySystem = false
 })
 
+if Window.settings then
+    Window.settings.mouseOverride = false
+end
+
 local KillTab, PlayerTab, WeaponTab, MiscTab = Window:CreateTab("Kill"), Window:CreateTab("Player"), Window:CreateTab("Weapon"), Window:CreateTab("Misc")
 local plrs, rs, uis = game:GetService("Players"), game:GetService("ReplicatedStorage"), game:GetService("UserInputService")
 local lp, mouse = plrs.LocalPlayer, plrs.LocalPlayer:GetMouse()
@@ -25,7 +29,7 @@ local targets = {"Bots", "Players", "Buildings"}
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     local m = getnamecallmethod()
-    if not checkcaller() and m == "GetAttribute" then
+    if not checkcaller() and m == "GetAttribute" and typeof(self) == "Instance" and self:IsA("Tool") then
         local a = ...
         if infAmmo and a == "CurrentAmmo" then return 999 end
         if firerate and a == "IsAutomatic" then return true end
@@ -77,19 +81,31 @@ WeaponTab:CreateToggle({Name = "InfAmmo", CurrentValue = false, Flag = "InfAmmoT
 WeaponTab:CreateSection("Buildings")
 WeaponTab:CreateToggle({Name = "Insta Heal Buildings", CurrentValue = false, Flag = "InstaHealBuildingsToggle", Callback = function(v) healBuild = v end})
 
-MiscTab:CreateKeybind({Name = "Mouse Dig", CurrentKeybind = "T", HoldToInteract = false, Flag = "DigKeybind", Callback = function() pcall(dig, "Subtract") end})
-MiscTab:CreateKeybind({Name = "Mouse Place", CurrentKeybind = "G", HoldToInteract = false, Flag = "PlaceKeybind", Callback = function() pcall(dig, "Add") end})
+local digBind = MiscTab:CreateKeybind({Name = "Mouse Dig", CurrentKeybind = "T", HoldToInteract = false, Flag = "DigKeybind", Callback = function() pcall(dig, "Subtract") end})
+local placeBind = MiscTab:CreateKeybind({Name = "Mouse Place", CurrentKeybind = "G", HoldToInteract = false, Flag = "PlaceKeybind", Callback = function() pcall(dig, "Add") end})
+
+local function getKey(bind, def)
+    local v = bind and bind.value
+    if typeof(v) == "EnumItem" then return v end
+    local f = Rayfield.Flags and Rayfield.Flags[bind == digBind and "DigKeybind" or "PlaceKeybind"]
+    local fv = f and (f.CurrentValue or f.value)
+    if typeof(fv) == "EnumItem" then return fv end
+    return def
+end
+
+local function isKeyDown(k)
+    if not k or k == Enum.KeyCode.Unknown then return false end
+    if k.EnumType == Enum.KeyCode then return uis:IsKeyDown(k) end
+    if k.EnumType == Enum.UserInputType then return uis:IsMouseButtonPressed(k) end
+    return false
+end
 
 task.spawn(function()
     while true do
         task.wait(0.05)
-        local d = Rayfield.Flags and Rayfield.Flags["DigKeybind"]
-        local p = Rayfield.Flags and Rayfield.Flags["PlaceKeybind"]
-        if d and d.CurrentKeybind and Enum.KeyCode[d.CurrentKeybind] and uis:IsKeyDown(Enum.KeyCode[d.CurrentKeybind]) then
-            pcall(dig, "Subtract")
-        end
-        if p and p.CurrentKeybind and Enum.KeyCode[p.CurrentKeybind] and uis:IsKeyDown(Enum.KeyCode[p.CurrentKeybind]) then
-            pcall(dig, "Add")
+        if not uis:GetFocusedTextBox() then
+            if isKeyDown(getKey(digBind, Enum.KeyCode.T)) then pcall(dig, "Subtract") end
+            if isKeyDown(getKey(placeBind, Enum.KeyCode.G)) then pcall(dig, "Add") end
         end
     end
 end)
@@ -101,10 +117,11 @@ task.spawn(function()
         local root = char and char:FindFirstChild("HumanoidRootPart")
         local myPos = root and root.Position or Vector3.new(0, 50, 0)
         local tool = char and char:FindFirstChildOfClass("Tool")
+        local isGun = tool and (tool:FindFirstChild("Config") or tool:GetAttribute("CurrentAmmo") ~= nil)
         local myTeam = lp.Team
         local myTeamName = myTeam and myTeam.Name
         local enemyTeam = myTeamName and ((myTeamName == "Black" and "Red") or (myTeamName == "Red" and "Black"))
-        if kill and tool then
+        if kill and tool and isGun then
             pcall(function()
                 if hasTarget("Players") then
                     for _, p in ipairs(plrs:GetPlayers()) do
@@ -167,7 +184,7 @@ task.spawn(function()
                 for _, c in ipairs({char, bp}) do
                     if c then
                         for _, t in ipairs(c:GetChildren()) do
-                            if t:IsA("Tool") then
+                            if t:IsA("Tool") and t:GetAttribute("DamageBlock") ~= nil then
                                 t:SetAttribute("DamageBlock", 99999)
                                 t:SetAttribute("MaxDamageBlock", 99999)
                             end
@@ -177,41 +194,43 @@ task.spawn(function()
                 Network:FireServer("RegenBlock", 99999)
             end)
         end
-        pcall(function()
-            local bp = lp:FindFirstChild("Backpack")
-            for _, cont in ipairs({char, bp}) do
-                if cont then
-                    for _, t in ipairs(cont:GetChildren()) do
-                        if t:IsA("Tool") then
-                            local cfg = t:FindFirstChild("Config")
-                            if cfg and cfg:IsA("ModuleScript") then
-                                local c = req(cfg)
-                                if noSpread then
-                                    c.Spread, c.ShotgunSpread = 0, 0
-                                    c.Recoil = {X = 0, Y = 0}
-                                    if type(c.CrossHairStats) == "table" then
-                                        c.CrossHairStats.MaxSpread, c.CrossHairStats.MinSpread, c.CrossHairStats.increasePerSecond = 0, 0, 0
+        if (noSpread or firerate or infAmmo) and char then
+            pcall(function()
+                local bp = lp:FindFirstChild("Backpack")
+                for _, cont in ipairs({char, bp}) do
+                    if cont then
+                        for _, t in ipairs(cont:GetChildren()) do
+                            if t:IsA("Tool") then
+                                local cfg = t:FindFirstChild("Config")
+                                if cfg and cfg:IsA("ModuleScript") then
+                                    local c = req(cfg)
+                                    if noSpread then
+                                        c.Spread, c.ShotgunSpread = 0, 0
+                                        if type(c.CrossHairStats) == "table" then
+                                            c.CrossHairStats.MaxSpread, c.CrossHairStats.MinSpread, c.CrossHairStats.increasePerSecond = 0, 0, 0
+                                        end
+                                    end
+                                    if firerate then
+                                        c.FireRate, c.Cooldown, c.Automatic = firerateVal, math.max(60 / firerateVal, 0.01), true
                                     end
                                 end
-                                if firerate then c.FireRate, c.Cooldown, c.Automatic = firerateVal, 0, true end
-                            end
-                            if infAmmo then
-                                local a = t:GetAttribute("CurrentAmmo")
-                                if a and a == 0 and not t:GetAttribute("IsReloading") then
-                                    Network:FireServer("RequestReload", t)
+                                if infAmmo then
+                                    local a = t:GetAttribute("CurrentAmmo")
+                                    if a and a <= 0 and not t:GetAttribute("IsReloading") then
+                                        Network:FireServer("RequestReload", t)
+                                    end
                                 end
                             end
                         end
                     end
                 end
-            end
-        end)
+            end)
+        end
         if healBuild and char then
             pcall(function()
                 local cf = workspace:FindFirstChild("Constructed Items Folder")
-                local bp = lp:FindFirstChild("Backpack")
-                local wk = char:FindFirstChild("Worker's Kit") or (bp and bp:FindFirstChild("Worker's Kit")) or tool
-                if cf and wk then
+                local wk = char:FindFirstChild("Worker's Kit") or tool
+                if cf and wk and wk.Parent == char then
                     for _, uf in ipairs(cf:GetChildren()) do
                         for _, item in ipairs(uf:GetChildren()) do
                             local tTeam = item:GetAttribute("Team")
