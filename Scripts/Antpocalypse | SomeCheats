@@ -1,3 +1,381 @@
 --[[ it's opensource :>     ]]--
 --[[ UI Lib: CustomRayfield ]]--
-local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/main/Rayfield/CustomRayfield.luau?t=" .. tick()))() local Window = Rayfield:CreateWindow({Name = "Antpocalypse | SomeCheats", LoadingTitle = "Antpocalypse | SomeCheats", LoadingSubtitle = "By: UnknownSquad", Theme = "Amethyst", Width = 460, Height = 360, Font = "Code", ConfigurationSaving = {Enabled = false}, KeySystem = false}) local KillTab, PlayerTab, WeaponTab, MiscTab = Window:CreateTab("Kill"), Window:CreateTab("Player"), Window:CreateTab("Weapon"), Window:CreateTab("Misc") local plrs, rs, uis = game:GetService("Players"), game:GetService("ReplicatedStorage"), game:GetService("UserInputService") local lp, mouse = plrs.LocalPlayer, plrs.LocalPlayer:GetMouse() local req = (getrenv and getrenv().require) or require local Network = req(rs:WaitForChild("Packages"):WaitForChild("Network")) local kill, heal, firerate, firerateVal, noSpread, infAmmo, healBuild = false, false, false, 6000, false, false, false local targets = {"Bots", "Players", "Buildings"} local origCfg = {} local rayParams = RaycastParams.new() rayParams.FilterType = Enum.RaycastFilterType.Exclude local function isAlive() local char = lp.Character if not char then return false end local hum = char:FindFirstChildOfClass("Humanoid") if not hum or hum.Health <= 0 or hum:GetState() == Enum.HumanoidStateType.Dead then return false end local root = char:FindFirstChild("HumanoidRootPart") if not root then return false end return true, char, hum, root end local function hasTarget(name) if type(targets) == "table" then for k, v in pairs(targets) do if v == name or (k == name and v == true) then return true end end end return false end local function getDigTarget() local alive, char, _, root = isAlive() if not alive then return end rayParams.FilterDescendantsInstances = {char} local res = workspace:Raycast(mouse.UnitRay.Origin, mouse.UnitRay.Direction * 1000, rayParams) local pos = res and res.Position or mouse.Hit.Position local mat = res and res.Material or Enum.Material.Ground local diff = pos - root.Position local targetPos = if diff.Magnitude > 9 then root.Position + diff.Unit * 8 else pos return targetPos, mat end local function dig(mode) local pos, mat = getDigTarget() if pos and mat then Network:FireServer("PlayerWantsToDig", pos, mode, mat) end end KillTab:CreateToggle({Name = "Kill", CurrentValue = false, Flag = "KillToggle", Callback = function(v) kill = v end}) KillTab:CreateDropdown({Name = "Target Selector", Options = {"Bots", "Players", "Buildings"}, CurrentOption = {"Bots", "Players", "Buildings"}, MultipleOptions = true, Flag = "TargetDropdown", Callback = function(v) targets = v end}) PlayerTab:CreateToggle({Name = "Insta-Heal", CurrentValue = false, Flag = "InstaHealToggle", Callback = function(v) heal = v end}) WeaponTab:CreateSection("Weapons") WeaponTab:CreateToggle({Name = "FirerateBoost", CurrentValue = false, Flag = "FirerateToggle", Callback = function(v) firerate = v end}) WeaponTab:CreateSlider({Name = "Firerate Value", Range = {100, 10000}, Increment = 100, Suffix = "", CurrentValue = 6000, Flag = "FirerateSlider", Callback = function(v) firerateVal = v end}) WeaponTab:CreateToggle({Name = "NoSpread", CurrentValue = false, Flag = "NoSpreadToggle", Callback = function(v) noSpread = v end}) WeaponTab:CreateToggle({Name = "InfAmmo", CurrentValue = false, Flag = "InfAmmoToggle", Callback = function(v) infAmmo = v end}) WeaponTab:CreateSection("Buildings") WeaponTab:CreateToggle({Name = "Insta Heal Buildings", CurrentValue = false, Flag = "InstaHealBuildingsToggle", Callback = function(v) healBuild = v end}) local digBind = MiscTab:CreateKeybind({Name = "Mouse Dig", CurrentKeybind = "T", HoldToInteract = false, Flag = "DigKeybind", Callback = function() pcall(dig, "Subtract") end}) local placeBind = MiscTab:CreateKeybind({Name = "Mouse Place", CurrentKeybind = "G", HoldToInteract = false, Flag = "PlaceKeybind", Callback = function() pcall(dig, "Add") end}) local function getKey(bind, def) local v = bind and bind.value if typeof(v) == "EnumItem" then return v end local f = Rayfield.Flags and Rayfield.Flags[bind == digBind and "DigKeybind" or "PlaceKeybind"] local fv = f and (f.CurrentValue or f.value) if typeof(fv) == "EnumItem" then return fv end return def end local function isKeyDown(k) if not k or k == Enum.KeyCode.Unknown then return false end if k.EnumType == Enum.KeyCode then return uis:IsKeyDown(k) end if k.EnumType == Enum.UserInputType then return uis:IsMouseButtonPressed(k) end return false end task.spawn(function() while true do task.wait(0.05) local alive = isAlive() if alive and not uis:GetFocusedTextBox() then if isKeyDown(getKey(digBind, Enum.KeyCode.T)) then pcall(dig, "Subtract") end if isKeyDown(getKey(placeBind, Enum.KeyCode.G)) then pcall(dig, "Add") end end end end) task.spawn(function() while true do task.wait(0.1) local alive, char, hum, root = isAlive() if not alive then continue end local myPos = root.Position local tool = char:FindFirstChildOfClass("Tool") local isGun = tool and tool.Name ~= "Breaker" and (tool:GetAttribute("IsGun") == true or tool:FindFirstChild("ShootPart")) local myTeam = lp.Team local myTeamName = myTeam and myTeam.Name local enemyTeam = myTeamName and ((myTeamName == "Black" and "Red") or (myTeamName == "Red" and "Black")) if kill and tool and isGun then pcall(function() local shotsFired = 0 if hasTarget("Players") and shotsFired < 10 then for _, p in ipairs(plrs:GetPlayers()) do if shotsFired >= 10 then break end if p ~= lp and p.Team ~= myTeam and p.Character then local head = p.Character:FindFirstChild("Head") or p.Character:FindFirstChild("HumanoidRootPart") local ehum = p.Character:FindFirstChildOfClass("Humanoid") if head and ehum and ehum.Health > 0 then Network:FireServer("ClientHitCharacter", tool, myPos, head.Position, p.Character, head, "Bullet", (head.Position - myPos).Unit) shotsFired += 1 end end end end if hasTarget("Bots") and shotsFired < 10 then local f = workspace:FindFirstChild("CharactersSpawned") local npcs = f and f:FindFirstChild("Npcs") if npcs then for _, tf in ipairs(npcs:GetChildren()) do if shotsFired >= 10 then break end if not enemyTeam or tf.Name == enemyTeam then for _, m in ipairs(tf:GetChildren()) do if shotsFired >= 10 then break end if m:IsA("Model") then local head = m:FindFirstChild("Head") or m:FindFirstChild("HumanoidRootPart") or m:FindFirstChildOfClass("BasePart") local ehum = m:FindFirstChildOfClass("Humanoid") if head and ehum and ehum.Health > 0 then Network:FireServer("ClientHitCharacter", tool, myPos, head.Position, m, head, "Bullet", (head.Position - myPos).Unit) shotsFired += 1 end end end end end end end if hasTarget("Buildings") and shotsFired < 10 then local cf = workspace:FindFirstChild("Constructed Items Folder") if cf then for _, uf in ipairs(cf:GetChildren()) do if shotsFired >= 10 then break end for _, item in ipairs(uf:GetChildren()) do if shotsFired >= 10 then break end local tTeam = item:GetAttribute("Team") if not myTeamName or not tTeam or tTeam ~= myTeamName then local ehum = item:FindFirstChildOfClass("Humanoid") local hit = item:FindFirstChild("Head") or item:FindFirstChild("Hitbox") or item:FindFirstChild("HumanoidRootPart") or item:FindFirstChildOfClass("BasePart") if ehum and hit and ehum.Health > 0 then Network:FireServer("ClientHitCharacter", tool, myPos, hit.Position, item, hit, "Bullet", (hit.Position - myPos).Unit) shotsFired += 1 end end end end end end end) end if heal then pcall(function() char:SetAttribute("HasMedicPassive", true) Network:FireServer("PassiveMedicHeal", hum) local bp = lp:FindFirstChild("Backpack") for _, c in ipairs({char, bp}) do if c then for _, t in ipairs(c:GetChildren()) do if t:IsA("Tool") and t.Name ~= "Breaker" and t:GetAttribute("DamageBlock") ~= nil then t:SetAttribute("DamageBlock", 99999) t:SetAttribute("MaxDamageBlock", 99999) end end end end Network:FireServer("RegenBlock", 99999) end) end pcall(function() local bp = lp:FindFirstChild("Backpack") for _, cont in ipairs({char, bp}) do if cont then for _, t in ipairs(cont:GetChildren()) do if t:IsA("Tool") and t.Name ~= "Breaker" and (t:GetAttribute("IsGun") == true or t:FindFirstChild("ShootPart")) then local cfg = t:FindFirstChild("Config") if cfg and cfg:IsA("ModuleScript") then local c = req(cfg) if not origCfg[t] then origCfg[t] = {FireRate = c.FireRate, Cooldown = c.Cooldown, Automatic = c.Automatic, Spread = c.Spread, ShotgunSpread = c.ShotgunSpread} end if noSpread then c.Spread = 0 if c.ShotgunSpread then c.ShotgunSpread = 0 end if type(c.CrossHairStats) == "table" then c.CrossHairStats.MaxSpread, c.CrossHairStats.MinSpread, c.CrossHairStats.increasePerSecond = 0, 0, 0 end elseif origCfg[t] then c.Spread = origCfg[t].Spread c.ShotgunSpread = origCfg[t].ShotgunSpread end if firerate then c.FireRate = firerateVal c.Cooldown = math.clamp(60 / firerateVal, 0.01, 1) c.Automatic = true t:SetAttribute("IsAutomatic", true) elseif origCfg[t] then c.FireRate = origCfg[t].FireRate c.Cooldown = origCfg[t].Cooldown c.Automatic = origCfg[t].Automatic t:SetAttribute("IsAutomatic", origCfg[t].Automatic or false) end end if infAmmo then local maxA = t:GetAttribute("MaxAmmo") if typeof(maxA) == "string" then maxA = tonumber(maxA) end if not maxA or maxA <= 0 then maxA = 30 end local curA = t:GetAttribute("CurrentAmmo") if typeof(curA) == "string" then curA = tonumber(curA) end if not curA or curA < maxA then t:SetAttribute("CurrentAmmo", maxA) if t:GetAttribute("SingleReload") then Network:FireServer("RequestSingleReload", t) else Network:FireServer("RequestReload", t) end end end end end end end) if healBuild then pcall(function() local cf = workspace:FindFirstChild("Constructed Items Folder") local wk = char:FindFirstChild("Worker's Kit") or tool if cf and wk and wk.Parent == char then for _, uf in ipairs(cf:GetChildren()) do for _, item in ipairs(uf:GetChildren()) do local tTeam = item:GetAttribute("Team") if not myTeamName or tTeam == myTeamName or uf.Name == tostring(lp.UserId) then local ehum = item:FindFirstChildOfClass("Humanoid") local hit = item:FindFirstChild("Head") or item:FindFirstChild("Hitbox") or item:FindFirstChild("HumanoidRootPart") or item:FindFirstChildOfClass("BasePart") if ehum and hit and ehum.Health < ehum.MaxHealth then Network:FireServer("ClientHitCharacter", wk, myPos, hit.Position, item, hit, "Melee", (hit.Position - myPos).Unit) end end end end end end) end end end)
+local Rayfield = loadstring(game:HttpGet("https://github.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/raw/refs/heads/main/Rayfield/CustomRayfield.luau"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Antpocalypse | SomeCheats",
+    LoadingTitle = "Antpocalypse | SomeCheats",
+    LoadingSubtitle = "By: UnknownSquad",
+    Theme = "Amethyst",
+    Width = 460,
+    Height = 360,
+    Font = "Code",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+local KillTab = Window:CreateTab("Kill")
+local PlayerTab = Window:CreateTab("Player")
+local WeaponTab = Window:CreateTab("Weapon")
+local MiscTab = Window:CreateTab("Misc")
+
+local plrs, rs, uis = game:GetService("Players"), game:GetService("ReplicatedStorage"), game:GetService("UserInputService")
+local lp, mouse = plrs.LocalPlayer, plrs.LocalPlayer:GetMouse()
+local Network = require(rs:WaitForChild("Packages"):WaitForChild("Network"))
+
+local kill, heal, firerate, firerateVal, noSpread, infAmmo, healBuild = false, false, false, 6000, false, false, false
+local targets = {"Bots", "Players", "Buildings"}
+local origCfg = {}
+
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function isAlive()
+    local char = lp.Character
+    if not char then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 or hum:GetState() == Enum.HumanoidStateType.Dead then return false end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return false end
+    return true, char, hum, root
+end
+
+local function hasTarget(name)
+    if type(targets) == "table" then
+        for k, v in pairs(targets) do
+            if v == name or (k == name and v == true) then return true end
+        end
+    elseif type(targets) == "string" then
+        return targets == name
+    end
+    return false
+end
+
+local function getDigTarget()
+    local alive, char, _, root = isAlive()
+    if not alive then return end
+    rayParams.FilterDescendantsInstances = {char}
+    local res = workspace:Raycast(mouse.UnitRay.Origin, mouse.UnitRay.Direction * 1000, rayParams)
+    local hitPos = if mouse.Hit then mouse.Hit.Position else mouse.UnitRay.Origin + mouse.UnitRay.Direction * 10
+    local pos = res and res.Position or hitPos
+    local mat = res and res.Material or Enum.Material.Ground
+    local diff = pos - root.Position
+    local targetPos = if diff.Magnitude > 9 then root.Position + diff.Unit * 8 else pos
+    return targetPos, mat
+end
+
+local function dig(mode)
+    local pos, mat = getDigTarget()
+    if pos and mat then
+        Network:FireServer("PlayerWantsToDig", pos, mode, mat)
+    end
+end
+
+KillTab:CreateToggle({
+    Name = "Kill",
+    CurrentValue = false,
+    Flag = "KillToggle",
+    Callback = function(v) kill = v end
+})
+
+KillTab:CreateDropdown({
+    Name = "Target Selector",
+    Options = {"Bots", "Players", "Buildings"},
+    CurrentOption = {"Bots", "Players", "Buildings"},
+    MultipleOptions = true,
+    Flag = "TargetDropdown",
+    Callback = function(v) targets = v end
+})
+
+PlayerTab:CreateToggle({
+    Name = "Insta-Heal",
+    CurrentValue = false,
+    Flag = "InstaHealToggle",
+    Callback = function(v) heal = v end
+})
+
+WeaponTab:CreateSection("Weapons")
+
+WeaponTab:CreateToggle({
+    Name = "FirerateBoost",
+    CurrentValue = false,
+    Flag = "FirerateToggle",
+    Callback = function(v) firerate = v end
+})
+
+WeaponTab:CreateSlider({
+    Name = "Firerate Value",
+    Range = {100, 10000},
+    Increment = 100,
+    Suffix = "",
+    CurrentValue = 6000,
+    Flag = "FirerateSlider",
+    Callback = function(v) firerateVal = v end
+})
+
+WeaponTab:CreateToggle({
+    Name = "NoSpread",
+    CurrentValue = false,
+    Flag = "NoSpreadToggle",
+    Callback = function(v) noSpread = v end
+})
+
+WeaponTab:CreateToggle({
+    Name = "InfAmmo",
+    CurrentValue = false,
+    Flag = "InfAmmoToggle",
+    Callback = function(v) infAmmo = v end
+})
+
+WeaponTab:CreateSection("Buildings")
+
+WeaponTab:CreateToggle({
+    Name = "Insta Heal Buildings",
+    CurrentValue = false,
+    Flag = "InstaHealBuildingsToggle",
+    Callback = function(v) healBuild = v end
+})
+
+local digBind = MiscTab:CreateKeybind({
+    Name = "Mouse Dig",
+    CurrentKeybind = "T",
+    HoldToInteract = false,
+    Flag = "DigKeybind",
+    Callback = function() pcall(dig, "Subtract") end
+})
+
+local placeBind = MiscTab:CreateKeybind({
+    Name = "Mouse Place",
+    CurrentKeybind = "G",
+    HoldToInteract = false,
+    Flag = "PlaceKeybind",
+    Callback = function() pcall(dig, "Add") end
+})
+
+local function toKey(k)
+    if typeof(k) == "EnumItem" then return k end
+    if typeof(k) == "string" then
+        local ok, res = pcall(function() return (Enum.KeyCode::any)[k] or (Enum.UserInputType::any)[k] end)
+        if ok and res then return res end
+    end
+    return nil
+end
+
+local function getKey(bind, flagName, def)
+    local k = toKey(bind and (bind.value or bind.CurrentKeybind))
+    if k then return k end
+    local f = Rayfield.Flags and Rayfield.Flags[flagName]
+    local fk = toKey(f and (f.CurrentValue or f.value or f.CurrentKeybind or f))
+    if fk then return fk end
+    return def
+end
+
+local function isKeyDown(k)
+    if not k or k == Enum.KeyCode.Unknown then return false end
+    if k.EnumType == Enum.KeyCode then return uis:IsKeyDown(k) end
+    if k.EnumType == Enum.UserInputType then return uis:IsMouseButtonPressed(k) end
+    return false
+end
+
+task.spawn(function()
+    while true do
+        task.wait(0.05)
+        if isAlive() and not uis:GetFocusedTextBox() then
+            if isKeyDown(getKey(digBind, "DigKeybind", Enum.KeyCode.T)) then pcall(dig, "Subtract") end
+            if isKeyDown(getKey(placeBind, "PlaceKeybind", Enum.KeyCode.G)) then pcall(dig, "Add") end
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        local alive, char, hum, root = isAlive()
+        if not alive then continue end
+        local myPos = root.Position
+        local tool = char:FindFirstChildOfClass("Tool") or lp.Backpack:FindFirstChildOfClass("Tool")
+        local isGun = tool and tool.Name ~= "Breaker" and (tool:GetAttribute("IsGun") == true or tool:FindFirstChild("ShootPart") or tool:FindFirstChild("Config"))
+        local myTeam = lp.Team
+        local myTeamName = myTeam and myTeam.Name
+        local enemyTeam = myTeamName and ((myTeamName == "Black" and "Red") or (myTeamName == "Red" and "Black"))
+
+        if kill and tool and isGun then
+            pcall(function()
+                local shots = 0
+                if hasTarget("Players") and shots < 10 then
+                    for _, p in ipairs(plrs:GetPlayers()) do
+                        if shots >= 10 then break end
+                        if p ~= lp and (not myTeam or p.Team ~= myTeam) and p.Character then
+                            local ehum = p.Character:FindFirstChildOfClass("Humanoid")
+                            local head = p.Character:FindFirstChild("Head") or p.Character:FindFirstChild("HumanoidRootPart")
+                            if head and ehum and ehum.Health > 0 and not p.Character:FindFirstChildOfClass("ForceField") then
+                                local dir = head.Position - myPos
+                                local unit = if dir.Magnitude > 0 then dir.Unit else Vector3.yAxis
+                                Network:FireServer("ClientHitCharacter", tool, myPos, head.Position, p.Character, head, "Bullet", unit)
+                                shots += 1
+                            end
+                        end
+                    end
+                end
+                if hasTarget("Bots") and shots < 10 then
+                    local f = workspace:FindFirstChild("CharactersSpawned")
+                    local npcs = f and f:FindFirstChild("Npcs")
+                    if npcs then
+                        for _, tf in ipairs(npcs:GetChildren()) do
+                            if shots >= 10 then break end
+                            if not enemyTeam or tf.Name == enemyTeam or not tf:IsA("Folder") then
+                                local bots = if tf:IsA("Model") then {tf} else tf:GetChildren()
+                                for _, m in ipairs(bots) do
+                                    if shots >= 10 then break end
+                                    if m:IsA("Model") then
+                                        local ehum = m:FindFirstChildOfClass("Humanoid")
+                                        local head = m:FindFirstChild("Head") or m:FindFirstChild("HumanoidRootPart") or m:FindFirstChildOfClass("BasePart")
+                                        if head and ehum and ehum.Health > 0 then
+                                            local dir = head.Position - myPos
+                                            local unit = if dir.Magnitude > 0 then dir.Unit else Vector3.yAxis
+                                            Network:FireServer("ClientHitCharacter", tool, myPos, head.Position, m, head, "Bullet", unit)
+                                            shots += 1
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+                if hasTarget("Buildings") and shots < 10 then
+                    local cf = workspace:FindFirstChild("Constructed Items Folder")
+                    if cf then
+                        for _, uf in ipairs(cf:GetChildren()) do
+                            if shots >= 10 then break end
+                            local items = if #uf:GetChildren() > 0 then uf:GetChildren() else {uf}
+                            for _, item in ipairs(items) do
+                                if shots >= 10 then break end
+                                local tTeam = item:GetAttribute("Team")
+                                if not myTeamName or not tTeam or tTeam ~= myTeamName then
+                                    local ehum = item:FindFirstChildOfClass("Humanoid")
+                                    local hit = item:FindFirstChild("Head") or item:FindFirstChild("Hitbox") or item:FindFirstChild("HumanoidRootPart") or item:FindFirstChildOfClass("BasePart")
+                                    if ehum and hit and ehum.Health > 0 then
+                                        local dir = hit.Position - myPos
+                                        local unit = if dir.Magnitude > 0 then dir.Unit else Vector3.yAxis
+                                        Network:FireServer("ClientHitCharacter", tool, myPos, hit.Position, item, hit, "Bullet", unit)
+                                        shots += 1
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+
+        if heal then
+            pcall(function()
+                char:SetAttribute("HasMedicPassive", true)
+                Network:FireServer("PassiveMedicHeal", hum)
+                if hum.Health < hum.MaxHealth then hum.Health = hum.MaxHealth end
+                local bp = lp:FindFirstChild("Backpack")
+                for _, c in ipairs({char, bp}) do
+                    if c then
+                        for _, t in ipairs(c:GetChildren()) do
+                            if t:IsA("Tool") and t.Name ~= "Breaker" and t:GetAttribute("DamageBlock") ~= nil then
+                                t:SetAttribute("DamageBlock", 99999)
+                                t:SetAttribute("MaxDamageBlock", 99999)
+                            end
+                        end
+                    end
+                end
+                Network:FireServer("RegenBlock", 99999)
+            end)
+        end
+
+        pcall(function()
+            local bp = lp:FindFirstChild("Backpack")
+            for _, cont in ipairs({char, bp}) do
+                if cont then
+                    for _, t in ipairs(cont:GetChildren()) do
+                        if t:IsA("Tool") and t.Name ~= "Breaker" and (t:GetAttribute("IsGun") == true or t:FindFirstChild("ShootPart") or t:FindFirstChild("Config")) then
+                            local cfg = t:FindFirstChild("Config")
+                            if cfg and cfg:IsA("ModuleScript") then
+                                local ok, c = pcall(require, cfg)
+                                if ok and type(c) == "table" then
+                                    if not origCfg[t] then
+                                        origCfg[t] = {
+                                            FireRate = c.FireRate,
+                                            Cooldown = c.Cooldown,
+                                            Automatic = c.Automatic,
+                                            Spread = c.Spread,
+                                            ShotgunSpread = c.ShotgunSpread,
+                                            CrossHairStats = if type(c.CrossHairStats) == "table" then table.clone(c.CrossHairStats) else nil
+                                        }
+                                    end
+                                    if noSpread then
+                                        c.Spread = 0
+                                        if c.ShotgunSpread then c.ShotgunSpread = 0 end
+                                        if type(c.CrossHairStats) == "table" then
+                                            c.CrossHairStats.MaxSpread, c.CrossHairStats.MinSpread, c.CrossHairStats.increasePerSecond = 0, 0, 0
+                                        end
+                                    elseif origCfg[t] then
+                                        c.Spread = origCfg[t].Spread
+                                        c.ShotgunSpread = origCfg[t].ShotgunSpread
+                                        if origCfg[t].CrossHairStats and type(c.CrossHairStats) == "table" then
+                                            c.CrossHairStats.MaxSpread = origCfg[t].CrossHairStats.MaxSpread
+                                            c.CrossHairStats.MinSpread = origCfg[t].CrossHairStats.MinSpread
+                                            c.CrossHairStats.increasePerSecond = origCfg[t].CrossHairStats.increasePerSecond
+                                        end
+                                    end
+                                    if firerate then
+                                        c.FireRate = firerateVal
+                                        c.Cooldown = math.clamp(60 / firerateVal, 0.001, 1)
+                                        c.Automatic = true
+                                        t:SetAttribute("IsAutomatic", true)
+                                        t:SetAttribute("CanFire", true)
+                                        t:SetAttribute("IsReloading", false)
+                                    elseif origCfg[t] then
+                                        c.FireRate = origCfg[t].FireRate
+                                        c.Cooldown = origCfg[t].Cooldown
+                                        c.Automatic = origCfg[t].Automatic
+                                        t:SetAttribute("IsAutomatic", origCfg[t].Automatic or false)
+                                    end
+                                    if infAmmo then
+                                        c.MaxAmmo = 999999
+                                        c.Ammo = 999999
+                                    end
+                                end
+                            end
+                            if infAmmo then
+                                t:SetAttribute("MaxAmmo", 999999)
+                                t:SetAttribute("CurrentAmmo", 999999)
+                                t:SetAttribute("CanFire", true)
+                                t:SetAttribute("IsReloading", false)
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+
+        if healBuild then
+            pcall(function()
+                local cf = workspace:FindFirstChild("Constructed Items Folder")
+                local wk = char:FindFirstChild("Worker's Kit") or (lp:FindFirstChild("Backpack") and lp.Backpack:FindFirstChild("Worker's Kit")) or tool
+                if cf and wk then
+                    for _, uf in ipairs(cf:GetChildren()) do
+                        local items = if #uf:GetChildren() > 0 then uf:GetChildren() else {uf}
+                        for _, item in ipairs(items) do
+                            local tTeam = item:GetAttribute("Team")
+                            if not myTeamName or tTeam == myTeamName or uf.Name == tostring(lp.UserId) then
+                                local ehum = item:FindFirstChildOfClass("Humanoid")
+                                local hit = item:FindFirstChild("Head") or item:FindFirstChild("Hitbox") or item:FindFirstChild("HumanoidRootPart") or item:FindFirstChildOfClass("BasePart")
+                                if ehum and hit and ehum.Health < ehum.MaxHealth then
+                                    local dir = hit.Position - myPos
+                                    local unit = if dir.Magnitude > 0 then dir.Unit else Vector3.yAxis
+                                    Network:FireServer("ClientHitCharacter", wk, myPos, hit.Position, item, hit, "Melee", unit)
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
