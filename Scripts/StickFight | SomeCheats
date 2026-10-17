@@ -1,0 +1,236 @@
+local lp = game.Players.LocalPlayer
+local players = game:GetService("Players")
+local rs = game:GetService("ReplicatedStorage")
+local ws = game:GetService("Workspace")
+local remotes = rs:WaitForChild("RemoteEvents")
+
+local deathCFrame = nil
+
+local function trackChar(char)
+    local t = char:WaitForChild("Torso")
+    local hum = char:WaitForChild("Humanoid")
+    hum.Died:Connect(function()
+        if t then
+            deathCFrame = t.CFrame
+        end
+    end)
+end
+
+if lp.Character then
+    task.spawn(trackChar, lp.Character)
+end
+
+lp.CharacterAdded:Connect(function(char)
+    trackChar(char)
+    if deathCFrame then
+        local t = char:WaitForChild("Torso")
+        task.wait(0.1)
+        t.CFrame = deathCFrame * CFrame.new(0, 5, 0)
+    end
+end)
+
+for _, v in ipairs(game.CoreGui.RobloxGui:GetChildren()) do
+    if v:IsA("ScreenGui") and v:FindFirstChild("StickFight | Utility") then
+        v:Destroy()
+    end
+end
+
+local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/main/Rayfield/CustomRayfield.luau"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "StickFight | SomeCheats",
+    LoadingTitle = "StickFight | SomeCheats",
+    LoadingSubtitle = "By: UnknownSquad",
+    Theme = "Amethyst",
+    Width = 460,
+    Height = 360,
+    Font = "Code",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+local MainTab = Window:CreateTab("Main")
+
+local targetPlayer = nil
+
+local function getPlayerList()
+    local list = {}
+    for _, p in ipairs(players:GetPlayers()) do
+        if p ~= lp then
+            table.insert(list, p.Name)
+        end
+    end
+    if #list == 0 then
+        table.insert(list, "None")
+    end
+    return list
+end
+
+local initialList = getPlayerList()
+targetPlayer = initialList[1]
+
+local playerDropdown = MainTab:CreateDropdown({
+    Name = "Player",
+    Options = initialList,
+    CurrentOption = {initialList[1]},
+    Callback = function(opt)
+        targetPlayer = type(opt) == "table" and opt[1] or opt
+    end
+})
+
+local function refreshDropdown(newTarget)
+    local updated = getPlayerList()
+    local chosen = newTarget or targetPlayer
+    if not table.find(updated, chosen) then
+        chosen = updated[1]
+    end
+    targetPlayer = chosen
+    if playerDropdown.Refresh then
+        playerDropdown:Refresh(updated, true)
+    elseif playerDropdown.Set then
+        playerDropdown:Set(updated)
+    end
+end
+
+players.PlayerAdded:Connect(function()
+    refreshDropdown(targetPlayer)
+end)
+
+players.PlayerRemoving:Connect(function(p)
+    refreshDropdown(targetPlayer == p.Name and nil or targetPlayer)
+end)
+
+task.spawn(function()
+    local lastCount = #players:GetPlayers()
+    while true do
+        task.wait(1)
+        local curCount = #players:GetPlayers()
+        if curCount ~= lastCount then
+            lastCount = curCount
+            refreshDropdown()
+        end
+    end
+end)
+
+MainTab:CreateButton({
+    Name = "Kill",
+    Callback = function()
+        local target = players:FindFirstChild(targetPlayer)
+        local targetChar = target and target.Character
+        if targetChar and remotes:FindFirstChild("KillCharacter") then
+            remotes.KillCharacter:FireServer(targetChar)
+        end
+    end
+})
+
+local loopKill = false
+MainTab:CreateToggle({
+    Name = "Loop Kill",
+    CurrentValue = false,
+    Callback = function(state)
+        loopKill = state
+        if loopKill then
+            task.spawn(function()
+                while loopKill do
+                    local target = players:FindFirstChild(targetPlayer)
+                    local targetChar = target and target.Character
+                    if targetChar and remotes:FindFirstChild("KillCharacter") then
+                        remotes.KillCharacter:FireServer(targetChar)
+                    end
+                    task.wait(0.2)
+                end
+            end)
+        end
+    end
+})
+
+MainTab:CreateButton({
+    Name = "GrabTool Closest",
+    Callback = function()
+        local myChar = lp.Character
+        local myTorso = myChar and myChar:FindFirstChild("Torso")
+        if not myTorso then return end
+        local toolsFolder = ws:FindFirstChild("Tools")
+        if not toolsFolder then return end
+        local closest = nil
+        local minDist = math.huge
+        for _, model in ipairs(toolsFolder:GetChildren()) do
+            if model:IsA("Model") then
+                local hitPart = model:FindFirstChildWhichIsA("BasePart")
+                if hitPart then
+                    local d = (hitPart.Position - myTorso.Position).Magnitude
+                    if d < minDist then
+                        minDist = d
+                        closest = hitPart
+                    end
+                end
+            end
+        end
+        if closest and remotes:FindFirstChild("EquipWeapon") then
+            if myChar:FindFirstChild("Tool") and myChar.Tool:FindFirstChildOfClass("Model") then
+                remotes.EquipWeapon:FireServer(false, false, myChar, false)
+            end
+            remotes.EquipWeapon:FireServer(true, closest, myChar)
+        end
+    end
+})
+
+MainTab:CreateButton({
+    Name = "GrabTool All",
+    Callback = function()
+        local myChar = lp.Character
+        if not myChar or not remotes:FindFirstChild("EquipWeapon") then return end
+        local toolsFolder = ws:FindFirstChild("Tools")
+        if not toolsFolder then return end
+        for _, model in ipairs(toolsFolder:GetChildren()) do
+            if model:IsA("Model") then
+                local hitPart = model:FindFirstChildWhichIsA("BasePart")
+                if hitPart then
+                    remotes.EquipWeapon:FireServer(true, hitPart, myChar)
+                    task.wait(0.05)
+                end
+            end
+        end
+    end
+})
+
+local MiscTab = Window:CreateTab("Misc")
+
+MiscTab:CreateButton({
+    Name = "FixCamera",
+    Callback = function()
+        local cam = workspace.CurrentCamera
+        cam.FieldOfView = 70
+        lp.CameraMinZoomDistance = 25
+        lp.CameraMaxZoomDistance = 60
+        local c = lp.Character
+        local t = c and c:FindFirstChild("Torso")
+        if t then
+            cam.CFrame = CFrame.new(t.Position - (cam.CFrame.LookVector * 30), t.Position)
+        end
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "GetallBadges",
+    Callback = function()
+        local giver = remotes:FindFirstChild("BadgeGiver")
+        if not giver then return end
+        local badgesMod = game:GetService("ReplicatedFirst"):FindFirstChild("Modules") and game.ReplicatedFirst.Modules:FindFirstChild("Badges")
+        if badgesMod then
+            local data = require(badgesMod)
+            if data and data.BadgeIDs then
+                for _, id in pairs(data.BadgeIDs) do
+                    giver:FireServer(tostring(id))
+                    task.wait(0.05)
+                end
+            end
+            if data and data.AdditionalBadges then
+                for _, id in pairs(data.AdditionalBadges) do
+                    giver:FireServer(tostring(id))
+                    task.wait(0.05)
+                end
+            end
+        end
+    end
+})
