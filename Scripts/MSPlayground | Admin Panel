@@ -494,7 +494,7 @@ local imageLoaderOk, imageLoaderError = pcall(function()
     })
 
     local speedOptions = {}
-    for n = 1, 50 do
+    for n = 1, 15 do
         table.insert(speedOptions, n .. "x")
     end
 
