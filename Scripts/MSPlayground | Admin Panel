@@ -361,7 +361,7 @@ local imageLoaderOk, imageLoaderError = pcall(function()
         local origin = root.CFrame * CFrame.new(0, h * pixelScale / 2 - 2, -12)
         local interval = 0.1
         local chunk = pixelsPerSecond * interval
-        local maxInflight = 100
+        local maxInflight = math.huge
         local inflight = 0
         local failed = 0
         local i = 1
@@ -493,9 +493,14 @@ local imageLoaderOk, imageLoaderError = pcall(function()
         end
     })
 
+    local speedOptions = {}
+    for n = 1, 50 do
+        table.insert(speedOptions, n .. "x")
+    end
+
     ImageTab:CreateDropdown({
         Name = "Speed",
-        Options = {"1x", "2x", "3x", "4x", "5x", "6x", "7x", "8x", "9x", "10x"},
+        Options = speedOptions,
         CurrentOption = {"5x"},
         MultipleOptions = false,
         Callback = function(Option)
@@ -524,7 +529,14 @@ local imageLoaderOk, imageLoaderError = pcall(function()
             task.spawn(function()
                 local ok, err = pcall(function()
                     notify("Fetching image")
-                    local data = fetchImage(imageLink, imageSize)
+                    local okFetch, data = pcall(fetchImage, imageLink, imageSize)
+                    if not okFetch then
+                        if tostring(data):find("Unsupported MIME") then
+                            data = fetchImage("https://images.weserv.nl/?output=png&url=" .. HttpService:UrlEncode(imageLink), imageSize)
+                        else
+                            error(data)
+                        end
+                    end
                     notify("Fetched " .. #data.runs .. " blocks, drawing")
                     if not cancelDraw then
                         drawImage(data)
