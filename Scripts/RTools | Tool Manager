@@ -734,21 +734,52 @@ TrollTab:CreateButton({
 TrollTab:CreateButton({
  Name = "Meteor",
  Callback = function()
-  local tool = getTrollTool("meteor")
-  if not tool then return end
-  local remote = tool:FindFirstChild("Activated") or tool:FindFirstChildWhichIsA("RemoteEvent", true)
-  if remote then
-   for _, target in ipairs(getSelectedTargets()) do
-    if target.Character then
-     local root = target.Character:FindFirstChild("HumanoidRootPart") or target.Character:FindFirstChild("Torso") or target.Character:FindFirstChild("UpperTorso")
-     if root then remote:FireServer(root.CFrame) end
+  local targets = getSelectedTargets()
+  for _, target in ipairs(targets) do
+   task.spawn(function()
+    if not target.Character then return end
+    local root = target.Character:FindFirstChild("HumanoidRootPart")
+     or target.Character:FindFirstChild("Torso")
+     or target.Character:FindFirstChild("UpperTorso")
+    if not root then return end
+    GiveTool:FireServer(LocalPlayer.Name, "meteor")
+    local bp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
+    local tool = bp and bp:WaitForChild("meteor", 1.5)
+    if not tool then tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("meteor") end
+    if tool then
+     local remote = tool:FindFirstChild("Activated") or tool:FindFirstChildWhichIsA("RemoteEvent", true)
+     if remote then
+      tool.Parent = LocalPlayer.Character
+      remote:FireServer(root.CFrame)
+     end
+     task.wait(0.1)
+     pcall(function()
+      tool.Parent = workspace
+      tool:Destroy()
+     end)
+    end
+   end)
+   task.wait(0.05)
+  end
+  task.wait(0.3)
+  pcall(function()
+   local bp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
+   if bp then
+    for _, item in ipairs(bp:GetChildren()) do
+     if item:IsA("Tool") and item.Name == "meteor" then
+      item.Parent = workspace
+      item:Destroy()
+     end
     end
    end
-  end
-  task.wait(0.05)
-  pcall(function()
-   tool.Parent = workspace
-   tool:Destroy()
+   if LocalPlayer.Character then
+    for _, item in ipairs(LocalPlayer.Character:GetChildren()) do
+     if item:IsA("Tool") and item.Name == "meteor" then
+      item.Parent = workspace
+      item:Destroy()
+     end
+    end
+   end
   end)
  end
 })
@@ -772,6 +803,56 @@ TrollTab:CreateButton({
    tool.Parent = workspace
    tool:Destroy()
   end)
+ end
+})
+local loopKillAll = false
+TrollTab:CreateToggle({
+ Name = "Loop Kill All",
+ CurrentValue = false,
+ Flag = "LoopKillAllToggle",
+ Callback = function(Value)
+  loopKillAll = Value
+  if loopKillAll then
+   task.spawn(function()
+    while loopKillAll do
+     local tool = getTrollTool("Cat gun")
+     if tool then
+      local inflict = tool:FindFirstChild("GunScript_Server") and tool.GunScript_Server:FindFirstChild("InflictTarget")
+      if inflict then
+       for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+         local hum = p.Character:FindFirstChildOfClass("Humanoid")
+         local torso = p.Character:FindFirstChild("Torso") or p.Character:FindFirstChild("UpperTorso") or p.Character:FindFirstChild("HumanoidRootPart")
+         if hum and hum.Health > 0 and torso then
+          inflict:FireServer(hum, torso, 999999, Vector3.zero, 0, 0, false)
+         end
+        end
+       end
+      end
+     end
+     task.wait(0.1)
+    end
+    pcall(function()
+     local bp = LocalPlayer:FindFirstChildOfClass("Backpack") or LocalPlayer:FindFirstChild("Backpack")
+     if bp then
+      for _, item in ipairs(bp:GetChildren()) do
+       if item:IsA("Tool") and item.Name == "Cat gun" then
+        item.Parent = workspace
+        item:Destroy()
+       end
+      end
+     end
+     if LocalPlayer.Character then
+      for _, item in ipairs(LocalPlayer.Character:GetChildren()) do
+       if item:IsA("Tool") and item.Name == "Cat gun" then
+        item.Parent = workspace
+        item:Destroy()
+       end
+      end
+     end
+    end)
+   end)
+  end
  end
 })
 local BlackListTab = Window:CreateTab("BlackListTool", 4483362458)
