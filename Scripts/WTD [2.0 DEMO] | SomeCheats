@@ -1,0 +1,326 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local player = Players.LocalPlayer
+local pgui = player:WaitForChild("PlayerGui")
+local mainGui = pgui:WaitForChild("AwesomeGUI")
+local talkBox = mainGui:WaitForChild("TalkFrame")
+local handleRemote = ReplicatedStorage:WaitForChild("AccessoryHandle", 10)
+local fxFolder = ReplicatedStorage:WaitForChild("Folder", 10)
+local fxRemote = fxFolder and fxFolder:WaitForChild("FX", 10)
+
+local autoFish = false
+local autoSell = false
+local fishMode = "UnLegit"
+
+local fishCache = {}
+local busySelling = false
+local isCasting = false
+
+local function clearPopup()
+    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Z, false, game)
+    task.wait(0.01)
+    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Z, false, game)
+end
+
+talkBox:GetPropertyChangedSignal("Visible"):Connect(function()
+    if talkBox.Visible and autoFish then
+        task.spawn(function()
+            for _ = 1, 12 do
+                if not talkBox.Visible then break end
+                clearPopup()
+                RunService.RenderStepped:Wait()
+            end
+        end)
+    end
+end)
+
+if fxRemote then
+    fxRemote.OnClientEvent:Connect(function(mode, data)
+        if mode == "Fish_Data" and type(data) == "table" then
+            fishCache = data
+            if autoSell and not busySelling then
+                task.spawn(function()
+                    busySelling = true
+                    for id, amount in pairs(data) do
+                        if id ~= "base" and type(amount) == "number" and amount > 0 then
+                            for _ = 1, amount do
+                                handleRemote:FireServer("Sell Fish", id)
+                                task.wait(0.03)
+                            end
+                        end
+                    end
+                    busySelling = false
+                end)
+            end
+        end
+    end)
+end
+
+local function getRod()
+    local char = player.Character
+    if char then
+        local tool = char:FindFirstChild("Fishing Rod") or char:FindFirstChildOfClass("Tool")
+        if tool and tool.Name:lower():find("rod") then 
+            return tool 
+        end
+    end
+    local bp = player:FindFirstChildOfClass("Backpack")
+    if bp then
+        local tool = bp:FindFirstChild("Fishing Rod") or bp:FindFirstChildOfClass("Tool")
+        if tool and tool.Name:lower():find("rod") then
+            tool.Parent = char
+            return tool
+        end
+    end
+    return nil
+end
+
+local function setRodScript(state)
+    local rod = getRod()
+    if rod then
+        for _, s in ipairs(rod:GetChildren()) do
+            if s:IsA("LocalScript") or s:IsA("Script") then
+                s.Enabled = state
+            end
+        end
+    end
+end
+
+local function hookOut(rod)
+    if not rod then return false end
+    local fish = rod:FindFirstChild("fish")
+    local handle = rod:FindFirstChild("Handle")
+    if fish and handle then
+        return (fish.Position - handle.Position).Magnitude > 8
+    end
+    return false
+end
+
+local function isRodActive(rod)
+    local h = rod:FindFirstChild("Handle")
+    local m = h and h:FindFirstChild("Main")
+    local r = m and m:FindFirstChild("RopeConstraint")
+    return r and r.Length >= 3
+end
+
+local function sellFish()
+    if not handleRemote or busySelling then return end
+    busySelling = true
+    for id, count in pairs(fishCache) do
+        if id ~= "base" and type(count) == "number" and count > 0 then
+            for _ = 1, count do
+                handleRemote:FireServer("Sell Fish", id)
+                task.wait(0.03)
+            end
+        end
+    end
+    local frame = mainGui:FindFirstChild("Fish_Frame")
+    local list = frame and frame:FindFirstChild("Array")
+    if list then
+        for _, btn in ipairs(list:GetChildren()) do
+            if btn:IsA("TextButton") and btn.Name ~= "base" and btn.Visible then
+                local num = btn:FindFirstChild("amount")
+                local count = num and tonumber(num.Text:match("%d+")) or 1
+                for _ = 1, count do
+                    handleRemote:FireServer("Sell Fish", btn.Name)
+                    task.wait(0.03)
+                end
+            end
+        end
+    end
+    handleRemote:FireServer("GiveAccessories")
+    busySelling = false
+end
+
+local function cast()
+    if not autoFish or isCasting then return end
+    if mainGui:FindFirstChild("FISHING") or talkBox.Visible then return end
+    local rod = getRod()
+    if not rod or hookOut(rod) then return end
+    isCasting = true
+    rod:Activate()
+    task.wait(0.6)
+    isCasting = false
+end
+
+mainGui.ChildAdded:Connect(function(child)
+    if child.Name == "FISHING" and child:IsA("Frame") and autoFish then
+        if fishMode == "UnLegit" then
+            child:Destroy()
+            return
+        end
+        task.wait(0.04)
+        local rod = getRod()
+        if not rod then return end
+        local bar, mark
+        for _, item in ipairs(child:GetChildren()) do
+            if item:IsA("Frame") then
+                if item.BackgroundColor3 == Color3.fromRGB(125, 255, 125) then
+                    bar = item
+                elseif item.ZIndex == 5 then
+                    mark = item
+                end
+            end
+        end
+        if bar and mark then
+            task.spawn(function()
+                while child.Parent == mainGui and autoFish and fishMode == "Legit" do
+                    local markY = mark.Position.Y.Scale
+                    local barY = bar.Position.Y.Scale
+                    local barH = bar.Size.Y.Scale
+                    if markY >= barY and markY <= (barY + barH) then
+                        rod:Activate()
+                        break
+                    end
+                    RunService.RenderStepped:Wait()
+                end
+            end)
+        end
+    end
+end)
+
+mainGui.ChildRemoved:Connect(function(child)
+    if child.Name == "FISHING" and child:IsA("Frame") and autoFish then
+        task.spawn(function()
+            for _ = 1, 8 do
+                if not talkBox.Visible then break end
+                clearPopup()
+                task.wait(0.02)
+            end
+            if autoSell then
+                sellFish()
+            end
+        end)
+        task.delay(0.25, function()
+            if autoFish and not mainGui:FindFirstChild("FISHING") and fishMode == "Legit" then
+                cast()
+            end
+        end)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if autoFish then
+            if fishMode == "UnLegit" then
+                local rod = getRod()
+                if rod then
+                    setRodScript(false)
+                    local minigame = mainGui:FindFirstChild("FISHING")
+                    if minigame then
+                        minigame:Destroy()
+                    end
+                    task.wait(0.5)
+                    if not isRodActive(rod) then
+                        rod:Activate()
+                    end
+                    local ev = rod:FindFirstChild("RemoteEvent")
+                    if ev then
+                        ev:FireServer(true)
+                    end
+                    task.wait(2)
+                    if talkBox.Visible then
+                        clearPopup()
+                    end
+                    if autoSell then
+                        sellFish()
+                    end
+                end
+            elseif fishMode == "Legit" and not isCasting then
+                local active = mainGui:FindFirstChild("FISHING") ~= nil
+                if not active then
+                    if talkBox.Visible then
+                        clearPopup()
+                    else
+                        local rod = getRod()
+                        if rod and not hookOut(rod) then
+                            setRodScript(true)
+                            cast()
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+player.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+local Rayfield = loadstring(game:HttpGet("https://github.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/raw/refs/heads/main/Rayfield/CustomRayfield.luau"))()
+local Window = Rayfield:CreateWindow({
+    Name = "WTD [2.0 DEMO] | SomeCheats",
+    LoadingTitle = "WTD [2.0 DEMO] | SomeCheats",
+    LoadingSubtitle = "By: UnknownSquad",
+    Theme = "Amethyst",
+    Width = 460,
+    Height = 360,
+    Font = "Code",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+local fTab = Window:CreateTab("Fish")
+fTab:CreateToggle({
+    Name = "Auto-Fish",
+    CurrentValue = false,
+    Flag = "AutoFish",
+    Callback = function(val)
+        autoFish = val
+        if val then
+            if fishMode == "Legit" then
+                cast()
+            else
+                setRodScript(false)
+            end
+        else
+            setRodScript(true)
+        end
+    end
+})
+
+fTab:CreateDropdown({
+    Name = "Fishing Mode",
+    Options = {"UnLegit", "Legit"},
+    CurrentOption = {"UnLegit"},
+    MultipleOptions = false,
+    Flag = "FishModeDropdown",
+    Callback = function(Option)
+        fishMode = Option[1] or Option
+        if autoFish and fishMode == "UnLegit" then
+            setRodScript(false)
+        else
+            setRodScript(true)
+        end
+    end,
+})
+
+fTab:CreateToggle({
+    Name = "Auto-Sell",
+    CurrentValue = false,
+    Flag = "AutoSell",
+    Callback = function(val)
+        autoSell = val
+        if val then
+            task.spawn(sellFish)
+        end
+    end
+})
+
+local mTab = Window:CreateTab("Misc")
+mTab:CreateButton({
+    Name = "GetPowerGems",
+    Callback = function()
+        if handleRemote then
+            handleRemote:FireServer("Trinket_Gems")
+        end
+    end
+})
