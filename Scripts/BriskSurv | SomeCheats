@@ -1,0 +1,374 @@
+local Rayfield = loadstring(game:HttpGet("https://github.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/raw/refs/heads/main/Rayfield/CustomRayfield.luau"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "BriskSurv | SomeCheats",
+    LoadingTitle = "BriskSurv | SomeCheats",
+    LoadingSubtitle = "By: UnknownSquad",
+    Theme = "Amethyst",
+    Width = 460,
+    Height = 360,
+    Font = "Code",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+local CombatTab = Window:CreateTab("Combat", 4483362458)
+local VisualsTab = Window:CreateTab("Visuals", 4483362458)
+
+local lp = game.Players.LocalPlayer
+local cam = workspace.CurrentCamera
+local rs = game:GetService("RunService")
+local uis = game:GetService("UserInputService")
+local plrs = game:GetService("Players")
+
+local meleeAura = false
+local autoCross = false
+local silentAim = false
+local playerEsp = false
+local resEsp = false
+
+local selectedRes = {
+    ["Cactus"] = true,
+    ["Stone"] = true,
+    ["Iron"] = true,
+    ["Nitrate"] = true,
+    ["Wood"] = true
+}
+
+CombatTab:CreateToggle({
+    Name = "MeleeAura",
+    CurrentValue = false,
+    Callback = function(v)
+        meleeAura = v
+    end
+})
+
+CombatTab:CreateToggle({
+    Name = "AutoCross",
+    CurrentValue = false,
+    Callback = function(v)
+        autoCross = v
+    end
+})
+
+CombatTab:CreateToggle({
+    Name = "SilentAim",
+    CurrentValue = false,
+    Callback = function(v)
+        silentAim = v
+    end
+})
+
+VisualsTab:CreateToggle({
+    Name = "PlayerESP",
+    CurrentValue = false,
+    Callback = function(v)
+        playerEsp = v
+    end
+})
+
+VisualsTab:CreateToggle({
+    Name = "ResourceESP",
+    CurrentValue = false,
+    Callback = function(v)
+        resEsp = v
+    end
+})
+
+VisualsTab:CreateDropdown({
+    Name = "Resources",
+    Options = {"Cactus", "Stone", "Iron", "Nitrate", "Wood"},
+    CurrentOption = {"Cactus", "Stone", "Iron", "Nitrate", "Wood"},
+    MultipleOptions = true,
+    Callback = function(opt)
+        for k in pairs(selectedRes) do
+            selectedRes[k] = false
+        end
+        for _, name in ipairs(opt) do
+            selectedRes[name] = true
+        end
+    end
+})
+
+local function getBestCross()
+    local char = lp.Character
+    if not char then return nil end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+    local wp = workspace:FindFirstChild("HarvestWeakPoints")
+    if not wp then return nil end
+    local bestPart = nil
+    local minDist = 18
+    for _, obj in ipairs(wp:GetChildren()) do
+        local p = obj:FindFirstChild("SlashA") or obj:FindFirstChildWhichIsA("BasePart")
+        if p then
+            local d = (root.Position - p.Position).Magnitude
+            if d < minDist then
+                minDist = d
+                bestPart = p
+            end
+        end
+    end
+    return bestPart
+end
+
+local function getMeleeTarget()
+    local char = lp.Character
+    if not char then return nil end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+    local bestHead = nil
+    local minDist = 18
+    for _, p in ipairs(plrs:GetPlayers()) do
+        if p ~= lp and p.Character then
+            local hum = p.Character:FindFirstChild("Humanoid")
+            local head = p.Character:FindFirstChild("Head")
+            if head and (not hum or hum.Health > 0) then
+                local d = (root.Position - head.Position).Magnitude
+                if d < minDist then
+                    minDist = d
+                    bestHead = head
+                end
+            end
+        end
+    end
+    return bestHead
+end
+
+local prevTargetPos = nil
+local prevTargetTime = nil
+local lastTarget = nil
+
+local function getGunTarget()
+    local best = nil
+    local minDist = 1200
+    for _, p in ipairs(plrs:GetPlayers()) do
+        if p ~= lp and p.Character then
+            local hum = p.Character:FindFirstChild("Humanoid")
+            local head = p.Character:FindFirstChild("Head")
+            if head and (not hum or hum.Health > 0) then
+                local sPos, onScreen = cam:WorldToViewportPoint(head.Position)
+                if onScreen then
+                    local mousePos = uis:GetMouseLocation()
+                    local d = (Vector2.new(sPos.X, sPos.Y) - mousePos).Magnitude
+                    if d < minDist then
+                        minDist = d
+                        best = head
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function getPredictedPos(targetPart)
+    local curPos = targetPart.Position
+    local curTime = os.clock()
+    local targetVel = Vector3.zero
+    if lastTarget == targetPart and prevTargetPos and prevTargetTime then
+        local dt = curTime - prevTargetTime
+        if dt > 0.001 and dt < 0.25 then
+            targetVel = (curPos - prevTargetPos) / dt
+        end
+    end
+    lastTarget = targetPart
+    prevTargetPos = curPos
+    prevTargetTime = curTime
+    local char = lp.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local origin = root and root.Position or cam.CFrame.Position
+    local bulletSpeed = 900
+    local dist = (curPos - origin).Magnitude
+    local t = dist / bulletSpeed
+    local predPos = curPos + (targetVel * t)
+    predPos = predPos + Vector3.new(0, 0.5 * 196.2 * (t ^ 2) * 0.15, 0)
+    return predPos
+end
+
+local espFolder = Instance.new("Folder", game.CoreGui)
+local espCache = {}
+
+local function updatePlayerEsp()
+    for _, p in ipairs(plrs:GetPlayers()) do
+        if p ~= lp and p.Character then
+            local hl = espCache[p]
+            if playerEsp then
+                if not hl or hl.Parent ~= espFolder then
+                    hl = Instance.new("Highlight")
+                    hl.Adornee = p.Character
+                    hl.FillColor = Color3.fromRGB(255, 60, 60)
+                    hl.FillTransparency = 0.5
+                    hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    hl.OutlineTransparency = 0
+                    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    hl.Parent = espFolder
+                    espCache[p] = hl
+                else
+                    hl.Adornee = p.Character
+                    hl.Enabled = true
+                end
+            elseif hl then
+                hl.Enabled = false
+            end
+        elseif espCache[p] then
+            espCache[p]:Destroy()
+            espCache[p] = nil
+        end
+    end
+end
+
+local resHighlights = {}
+
+local function getResType(name)
+    if name:find("Cactus") then return "Cactus" end
+    if name:find("Stone") then return "Stone" end
+    if name:find("Iron") then return "Iron" end
+    if name:find("Nitrate") then return "Nitrate" end
+    if name:find("Tree") or name:find("Pine") then return "Wood" end
+    return nil
+end
+
+local function getResColor(t)
+    if t == "Cactus" then return Color3.fromRGB(80, 220, 80) end
+    if t == "Stone" then return Color3.fromRGB(130, 130, 130) end
+    if t == "Iron" then return Color3.fromRGB(255, 160, 50) end
+    if t == "Nitrate" then return Color3.fromRGB(255, 255, 255) end
+    if t == "Wood" then return Color3.fromRGB(160, 110, 60) end
+    return Color3.fromRGB(255, 255, 0)
+end
+
+local function cleanResEsp()
+    for inst, hl in pairs(resHighlights) do
+        hl:Destroy()
+        resHighlights[inst] = nil
+    end
+end
+
+local lastResCheck = 0
+local function updateResourceEsp()
+    if not resEsp then
+        cleanResEsp()
+        return
+    end
+    local now = os.clock()
+    if now - lastResCheck < 0.3 then return end
+    lastResCheck = now
+    local char = lp.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local sh = workspace:FindFirstChild("SpawnedHarvestables")
+    if not sh then return end
+    local myPos = root.Position
+    for _, item in ipairs(sh:GetChildren()) do
+        local rType = getResType(item.Name)
+        if rType and selectedRes[rType] then
+            local prim = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart")
+            if prim then
+                local dist = (prim.Position - myPos).Magnitude
+                if dist < 220 then
+                    local hl = resHighlights[item]
+                    local col = getResColor(rType)
+                    if not hl or hl.Parent ~= espFolder then
+                        hl = Instance.new("Highlight")
+                        hl.Adornee = item
+                        hl.FillColor = col
+                        hl.FillTransparency = 0.5
+                        hl.OutlineColor = col
+                        hl.OutlineTransparency = 0
+                        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                        hl.Parent = espFolder
+                        resHighlights[item] = hl
+                    else
+                        hl.Adornee = item
+                        hl.FillColor = col
+                        hl.OutlineColor = col
+                        hl.Enabled = true
+                    end
+                elseif resHighlights[item] then
+                    resHighlights[item].Enabled = false
+                end
+            end
+        elseif resHighlights[item] then
+            resHighlights[item].Enabled = false
+        end
+    end
+end
+
+local lastEspTick = 0
+rs.RenderStepped:Connect(function()
+    local now = os.clock()
+    if now - lastEspTick > 0.08 then
+        lastEspTick = now
+        updatePlayerEsp()
+        updateResourceEsp()
+    end
+end)
+
+local mt = getrawmetatable(game)
+local oldNamecall = mt.__namecall
+local oldIndex = mt.__index
+setreadonly(mt, false)
+
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    if not checkcaller() then
+        if method == "Raycast" and (autoCross or meleeAura) then
+            local cross = autoCross and getBestCross()
+            local melee = meleeAura and getMeleeTarget()
+            local targetPart = cross or melee
+            if targetPart then
+                local origin = args[1]
+                local dir = (targetPart.Position - origin).Unit * 25
+                args[2] = dir
+                return oldNamecall(self, table.unpack(args))
+            end
+        end
+        if method == "FireServer" and tostring(self):find("Gun") and silentAim then
+            local target = getGunTarget()
+            if target then
+                local predPos = getPredictedPos(target)
+                for i, v in ipairs(args) do
+                    if typeof(v) == "Vector3" then
+                        args[i] = predPos
+                        break
+                    end
+                end
+                return oldNamecall(self, table.unpack(args))
+            end
+        end
+    end
+    return oldNamecall(self, ...)
+end)
+
+mt.__index = newcclosure(function(self, key)
+    if not checkcaller() and (key == "Hit" or key == "Target") and self:IsA("Mouse") then
+        if autoCross or meleeAura then
+            local cross = autoCross and getBestCross()
+            local melee = meleeAura and getMeleeTarget()
+            local target = cross or melee
+            if target then
+                if key == "Hit" then
+                    return CFrame.new(target.Position)
+                elseif key == "Target" then
+                    return target
+                end
+            end
+        end
+        if silentAim then
+            local target = getGunTarget()
+            if target then
+                local predPos = getPredictedPos(target)
+                if key == "Hit" then
+                    return CFrame.new(predPos)
+                elseif key == "Target" then
+                    return target
+                end
+            end
+        end
+    end
+    return oldIndex(self, key)
+end)
+
+setreadonly(mt, true)
