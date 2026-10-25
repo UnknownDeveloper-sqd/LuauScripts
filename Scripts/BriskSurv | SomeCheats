@@ -17,16 +17,20 @@ local VisualsTab = Window:CreateTab("Visuals", 4483362458)
 
 local lp = game.Players.LocalPlayer
 local plrs = game:GetService("Players")
-local rs = game:GetService("RunService")
 local uis = game:GetService("UserInputService")
-local wp = workspace:WaitForChild("HarvestWeakPoints")
+local cs = game:GetService("CollectionService")
+local wp = workspace:FindFirstChild("HarvestWeakPoints") or workspace:WaitForChild("HarvestWeakPoints", 5)
+
+local cam = workspace.CurrentCamera
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+    cam = workspace.CurrentCamera
+end)
 
 local meleeAura = false
 local autoCross = false
 local silentAim = false
 local playerEsp = false
 
-local unpack = table.unpack or unpack
 local newc = newcclosure or function(f) return f end
 local check = checkcaller or function() return false end
 
@@ -62,16 +66,50 @@ VisualsTab:CreateToggle({
     end
 })
 
+local function getCharRoot()
+    local c = lp.Character
+    return c, c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function hasGunEquipped()
+    local c = lp.Character
+    if not c then return false end
+    local tool = c:FindFirstChildWhichIsA("Tool")
+    return tool and (tool:FindFirstChild("ClientGun") ~= nil or tool:GetAttribute("GunName") ~= nil)
+end
+
+local function getEquippedHammer()
+    local c = lp.Character
+    if not c then return nil end
+    local tool = c:FindFirstChildWhichIsA("Tool")
+    if tool and (tool.Name:find("Hammer") or tool:FindFirstChild("HammerClient")) then
+        return tool
+    end
+    local bp = lp:FindFirstChild("Backpack")
+    if bp then
+        for _, t in ipairs(bp:GetChildren()) do
+            if t:IsA("Tool") and (t.Name:find("Hammer") or t:FindFirstChild("HammerClient")) then
+                t.Parent = c
+                return t
+            end
+        end
+    end
+    return nil
+end
+
+local function getCrosshair()
+    local vp = cam and cam.ViewportSize or Vector2.new(800, 600)
+    if uis.TouchEnabled or not uis.MouseEnabled or uis.MouseBehavior == Enum.MouseBehavior.LockCenter then
+        return Vector2.new(vp.X * 0.5, vp.Y * 0.5)
+    end
+    return uis:GetMouseLocation()
+end
+
 local function getBestCross()
-    local char = lp.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local _, root = getCharRoot()
     if not root or not wp then return nil end
-    local cam = workspace.CurrentCamera
-    if not cam then return nil end
     local best = nil
-    local bestDot = 0.3
-    local cPos = cam.CFrame.Position
-    local cLook = cam.CFrame.LookVector
+    local minDistSq = 72
     local rPos = root.Position
     local pts = wp:GetChildren()
     for i = 1, #pts do
@@ -79,13 +117,13 @@ local function getBestCross()
         local p = pt:FindFirstChild("SlashA") or pt:FindFirstChild("Spark1") or pt:FindFirstChildWhichIsA("BasePart")
         if p then
             local pPos = p.Position
-            if (rPos - pPos).Magnitude <= 15 then
-                local dir = (pPos - cPos).Unit
-                local dot = cLook:Dot(dir)
-                if dot > bestDot then
-                    bestDot = dot
-                    best = p
-                end
+            local ox = rPos.X - pPos.X
+            local oy = rPos.Y - pPos.Y
+            local oz = rPos.Z - pPos.Z
+            local dSq = ox * ox + oy * oy + oz * oz
+            if dSq < minDistSq then
+                minDistSq = dSq
+                best = p
             end
         end
     end
@@ -93,23 +131,28 @@ local function getBestCross()
 end
 
 local function getMeleeTarget()
-    local char = lp.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local _, root = getCharRoot()
     if not root then return nil end
     local best = nil
-    local minDist = 12
+    local minDistSq = 72
     local rPos = root.Position
     local all = plrs:GetPlayers()
     for i = 1, #all do
         local p = all[i]
-        if p ~= lp and p.Character then
-            local hum = p.Character:FindFirstChild("Humanoid")
-            local head = p.Character:FindFirstChild("Head")
-            if head and hum and hum.Health > 0 then
-                local d = (rPos - head.Position).Magnitude
-                if d < minDist then
-                    minDist = d
-                    best = head
+        if p ~= lp then
+            local char = p.Character
+            if char then
+                local hum = char:FindFirstChild("Humanoid")
+                local head = char:FindFirstChild("Head")
+                if head and hum and hum.Health > 0 then
+                    local ox = rPos.X - head.Position.X
+                    local oy = rPos.Y - head.Position.Y
+                    local oz = rPos.Z - head.Position.Z
+                    local dSq = ox * ox + oy * oy + oz * oz
+                    if dSq < minDistSq then
+                        minDistSq = dSq
+                        best = head
+                    end
                 end
             end
         end
@@ -118,24 +161,48 @@ local function getMeleeTarget()
 end
 
 local function getGunTarget()
-    local cam = workspace.CurrentCamera
     if not cam then return nil end
     local best = nil
-    local minDist = 1000
-    local cursorPos = uis:GetMouseLocation()
+    local vp = cam.ViewportSize
+    local minDist = math.min(vp.X, vp.Y) * 0.4
+    local curPos = getCrosshair()
     local all = plrs:GetPlayers()
     for i = 1, #all do
         local p = all[i]
-        if p ~= lp and p.Character then
-            local hum = p.Character:FindFirstChild("Humanoid")
-            local head = p.Character:FindFirstChild("Head")
-            if head and hum and hum.Health > 0 then
-                local sPos, onScreen = cam:WorldToViewportPoint(head.Position)
-                if onScreen then
-                    local d = (Vector2.new(sPos.X, sPos.Y) - cursorPos).Magnitude
-                    if d < minDist then
-                        minDist = d
-                        best = head
+        if p ~= lp then
+            local char = p.Character
+            if char then
+                local hum = char:FindFirstChild("Humanoid")
+                local head = char:FindFirstChild("Head")
+                if head and hum and hum.Health > 0 then
+                    local sPos = cam:WorldToViewportPoint(head.Position)
+                    if sPos.Z > 0 then
+                        local dx = sPos.X - curPos.X
+                        local dy = sPos.Y - curPos.Y
+                        local d = math.sqrt(dx * dx + dy * dy)
+                        if d < minDist then
+                            minDist = d
+                            best = head
+                        end
+                    end
+                end
+            end
+        end
+    end
+    local drones = cs:GetTagged("BriskRuntimeSentinel")
+    for i = 1, #drones do
+        local d = drones[i]
+        if d:IsDescendantOf(workspace) and d:GetAttribute("SentinelDead") ~= true then
+            local part = d:FindFirstChild("BodyHitBox") or d.PrimaryPart or d:FindFirstChildWhichIsA("BasePart")
+            if part then
+                local sPos = cam:WorldToViewportPoint(part.Position)
+                if sPos.Z > 0 then
+                    local dx = sPos.X - curPos.X
+                    local dy = sPos.Y - curPos.Y
+                    local dist = math.sqrt(dx * dx + dy * dy)
+                    if dist < minDist then
+                        minDist = dist
+                        best = part
                     end
                 end
             end
@@ -155,24 +222,34 @@ espFolder.Name = "ESPFolder"
 espFolder.Parent = guiParent
 local espCache = {}
 
+local function removeEsp(p)
+    local hl = espCache[p]
+    if hl then
+        hl:Destroy()
+        espCache[p] = nil
+    end
+end
+
+plrs.PlayerRemoving:Connect(removeEsp)
+
 local function updatePlayerEsp()
     if not playerEsp then
-        for p, hl in pairs(espCache) do
-            hl:Destroy()
-            espCache[p] = nil
+        for p in pairs(espCache) do
+            removeEsp(p)
         end
         return
     end
     local all = plrs:GetPlayers()
     for i = 1, #all do
         local p = all[i]
-        if p ~= lp and p.Character then
-            local hum = p.Character:FindFirstChild("Humanoid")
+        if p ~= lp then
+            local char = p.Character
+            local hum = char and char:FindFirstChild("Humanoid")
             if hum and hum.Health > 0 then
                 local hl = espCache[p]
                 if not hl or hl.Parent ~= espFolder then
                     hl = Instance.new("Highlight")
-                    hl.Adornee = p.Character
+                    hl.Adornee = char
                     hl.FillColor = Color3.fromRGB(255, 60, 60)
                     hl.FillTransparency = 0.5
                     hl.OutlineColor = Color3.fromRGB(255, 255, 255)
@@ -180,74 +257,127 @@ local function updatePlayerEsp()
                     hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                     hl.Parent = espFolder
                     espCache[p] = hl
-                else
-                    hl.Adornee = p.Character
+                elseif hl.Adornee ~= char then
+                    hl.Adornee = char
                 end
-            elseif espCache[p] then
-                espCache[p]:Destroy()
-                espCache[p] = nil
+            else
+                removeEsp(p)
             end
-        elseif espCache[p] then
-            espCache[p]:Destroy()
-            espCache[p] = nil
         end
     end
 end
 
-local lastEsp = 0
-rs.RenderStepped:Connect(function()
-    local now = os.clock()
-    if now - lastEsp > 0.25 then
-        lastEsp = now
+task.spawn(function()
+    while true do
+        task.wait(0.2)
         updatePlayerEsp()
     end
 end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if meleeAura then
+            local target = getMeleeTarget()
+            if target then
+                local tool = getEquippedHammer()
+                if tool then
+                    tool:Activate()
+                    task.wait(0.8)
+                end
+            end
+        end
+    end
+end)
+
+if uis.TouchEnabled then
+    local toggleGui = Instance.new("ScreenGui")
+    toggleGui.Name = "MobileToggleGui"
+    toggleGui.ResetOnSpawn = false
+    toggleGui.Parent = guiParent
+
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Name = "ToggleUI"
+    toggleBtn.Size = UDim2.fromOffset(45, 45)
+    toggleBtn.Position = UDim2.new(0.02, 0, 0.25, 0)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(80, 40, 120)
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn.Text = "UI"
+    toggleBtn.TextSize = 16
+    toggleBtn.Font = Enum.Font.Code
+    toggleBtn.Parent = toggleGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = toggleBtn
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(150, 90, 220)
+    stroke.Thickness = 1.5
+    stroke.Parent = toggleBtn
+
+    toggleBtn.Activated:Connect(function()
+        for _, g in ipairs(guiParent:GetChildren()) do
+            if g:IsA("ScreenGui") and g ~= toggleGui and g.Name ~= "ESPFolder" then
+                g.Enabled = not g.Enabled
+            end
+        end
+    end)
+end
 
 local oldNamecall
 local oldIndex
 
 local function namecallHook(self, ...)
+    if check() then return oldNamecall(self, ...) end
     local rawMethod = getnamecallmethod and getnamecallmethod()
     local method = rawMethod and rawMethod:lower() or ""
-    local args = {...}
-    if not check() then
-        if method == "fireserver" then
-            if self.Name == "HammerMeleeRemote" then
-                if meleeAura then
-                    local target = getMeleeTarget()
-                    if target and typeof(args[2]) == "Vector3" then
-                        local vel = target.AssemblyLinearVelocity or Vector3.new(0, 0, 0)
-                        local targetPos = target.Position + vel * 0.04 + Vector3.new(0, 0.12, 0)
-                        args[3] = (targetPos - args[2]).Unit
-                        return self.FireServer(self, unpack(args))
+    if method == "fireserver" then
+        if self.Name == "HammerMeleeRemote" then
+            if meleeAura then
+                local target = getMeleeTarget()
+                if target then
+                    local toolName, origin, _, timeStamp = ...
+                    if typeof(origin) == "Vector3" then
+                        local vel = target.AssemblyLinearVelocity or Vector3.zero
+                        local newDir = (target.Position + vel * 0.04 - origin).Unit
+                        if setnamecallmethod and rawMethod then
+                            setnamecallmethod(rawMethod)
+                        end
+                        return oldNamecall(self, toolName, origin, newDir, timeStamp)
                     end
-                end
-                if autoCross then
-                    local cross = getBestCross()
-                    if cross and typeof(args[2]) == "Vector3" then
-                        args[3] = (cross.Position - args[2]).Unit
-                        return self.FireServer(self, unpack(args))
-                    end
-                end
-            elseif self.Name == "GunFire" and silentAim then
-                local target = getGunTarget()
-                if target and typeof(args[2]) == "Vector3" then
-                    local vel = target.AssemblyLinearVelocity or Vector3.new(0, 0, 0)
-                    local targetPos = target.Position + vel * 0.04 + Vector3.new(0, 0.12, 0)
-                    args[3] = (targetPos - args[2]).Unit
-                    return self.FireServer(self, unpack(args))
                 end
             end
-        elseif method == "raycast" and silentAim then
-            local target = getGunTarget()
-            if target and typeof(args[1]) == "Vector3" then
-                local vel = target.AssemblyLinearVelocity or Vector3.new(0, 0, 0)
-                local targetPos = target.Position + vel * 0.04 + Vector3.new(0, 0.12, 0)
-                args[2] = (targetPos - args[1]).Unit * 1200
-                if setnamecallmethod and rawMethod then
-                    setnamecallmethod(rawMethod)
+            if autoCross then
+                local cross = getBestCross()
+                if cross then
+                    local toolName, origin, _, timeStamp = ...
+                    if typeof(origin) == "Vector3" then
+                        local newDir = (cross.Position - origin).Unit
+                        if setnamecallmethod and rawMethod then
+                            setnamecallmethod(rawMethod)
+                        end
+                        return oldNamecall(self, toolName, origin, newDir, timeStamp)
+                    end
                 end
-                return oldNamecall(self, unpack(args))
+            end
+        elseif self.Name == "GunFire" and silentAim then
+            local target = getGunTarget()
+            if target then
+                local weaponName, origin, _, timeStamp = ...
+                if typeof(origin) == "Vector3" then
+                    local dist = (target.Position - origin).Magnitude
+                    local t = dist / 700
+                    local grav = workspace.Gravity > 0 and workspace.Gravity or 196.2
+                    local drop = 0.5 * grav * t * t
+                    local vel = target.AssemblyLinearVelocity or Vector3.zero
+                    local aimPos = target.Position + vel * t + Vector3.new(0, drop, 0)
+                    local newDir = (aimPos - origin).Unit
+                    if setnamecallmethod and rawMethod then
+                        setnamecallmethod(rawMethod)
+                    end
+                    return oldNamecall(self, weaponName, origin, newDir, timeStamp)
+                end
             end
         end
     end
@@ -258,7 +388,7 @@ local function namecallHook(self, ...)
 end
 
 local function indexHook(self, key)
-    if not check() and silentAim and self:IsA("Mouse") and (key == "Hit" or key == "Target") then
+    if not check() and silentAim and (key == "Hit" or key == "Target") and hasGunEquipped() and self:IsA("Mouse") then
         local target = getGunTarget()
         if target then
             return (key == "Hit" and CFrame.new(target.Position)) or target
