@@ -1,0 +1,45 @@
+local lp = game.Players.LocalPlayer
+local tto = lp:WaitForChild("PlayerScripts"):WaitForChild("TTOClient")
+local passes = require(tto:WaitForChild("Passes"))
+local ui = require(tto:WaitForChild("UI"))
+
+local Rayfield = loadstring(game:HttpGet("https://github.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/raw/refs/heads/main/Rayfield/CustomRayfield.luau"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Ragdoll Playground | UnknownSquad",
+    LoadingTitle = "Ragdoll Playground | UnknownSquad",
+    LoadingSubtitle = "By: UnknownSquad",
+    Theme = "Amethyst",
+    Width = 460,
+    Height = 360,
+    Font = "Code",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+local Tab = Window:CreateTab("Main")
+
+Tab:CreateButton({
+    Name = "Unlock All Passes",
+    Callback = function()
+        passes.owns = function() return true end
+        passes.ownsSkin = function() return true end
+        passes.packOwned.bundle = true
+        passes.packOwned.tools = true
+        passes.packOwned.powers = true
+        passes.packOwned.vip = true
+        for k in pairs(passes.IDS) do passes.owned[k] = true end
+        for k in pairs(passes.PACK_IDS) do passes.packOwned[k] = true end
+        if passes.refresh then passes.refresh() end
+    end
+})
+
+Tab:CreateSlider({
+    Name = "Time Scale",
+    Range = {0.1, 5},
+    Increment = 0.1,
+    CurrentValue = 1,
+    Callback = function(val)
+        ui.timeScale = val
+    end
+})
