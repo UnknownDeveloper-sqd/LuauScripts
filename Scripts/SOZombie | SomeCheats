@@ -16,7 +16,7 @@ local Window = Rayfield:CreateWindow({
     KeySystem = false
 })
 
-local morphTab = Window:CreateTab("Morphs")
+local mainTab = Window:CreateTab("Main")
 
 local morphs = {}
 for _, v in ipairs(rs.Morphs:GetChildren()) do
@@ -25,7 +25,7 @@ end
 table.sort(morphs)
 
 local morphChoice = morphs[1]
-morphTab:CreateDropdown({
+mainTab:CreateDropdown({
     Name = "Select Morph",
     Options = morphs,
     CurrentOption = {morphs[1]},
@@ -35,10 +35,46 @@ morphTab:CreateDropdown({
     end
 })
 
-morphTab:CreateButton({
+mainTab:CreateButton({
     Name = "Change Morph",
     Callback = function()
         local m = rs.Morphs:FindFirstChild(morphChoice)
+        if m then
+            rs.CharChange:FireServer(m)
+        end
+    end
+})
+mainTab:CreateParagraph({
+    Title = "",
+    Content = ""
+})
+local npcMap = {}
+local npcs = {}
+for _, v in ipairs(rs:GetDescendants()) do
+    if v:IsA("Model") and v:FindFirstChildOfClass("Humanoid") and not v:IsDescendantOf(rs.Morphs) then
+        if not npcMap[v.Name] then
+            npcMap[v.Name] = v
+            table.insert(npcs, v.Name)
+        end
+    end
+end
+table.sort(npcs)
+
+local npcChoice = npcs[1]
+mainTab:CreateDropdown({
+    Name = "Select NPC",
+    Options = npcs,
+    CurrentOption = {npcs[1]},
+    MultipleOptions = false,
+    Callback = function(opt)
+        npcChoice = type(opt) == "table" and opt[1] or opt
+    end
+})
+
+mainTab:CreateButton({
+    Name = "Change Morph",
+    Callback = function()
+        local m = npcMap[npcChoice]
         if m then
             rs.CharChange:FireServer(m)
         end
