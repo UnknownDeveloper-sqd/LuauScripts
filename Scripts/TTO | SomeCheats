@@ -1,7 +1,8 @@
 local lp = game.Players.LocalPlayer
 local tto = lp:WaitForChild("PlayerScripts"):WaitForChild("TTOClient")
-local passes = require(tto:WaitForChild("Passes"))
-local ui = require(tto:WaitForChild("UI"))
+local req = (require :: any)
+local passes = req(tto:WaitForChild("Passes"))
+local ui = req(tto:WaitForChild("UI"))
 
 local Rayfield = loadstring(game:HttpGet("https://github.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/raw/refs/heads/main/Rayfield/CustomRayfield.luau"))()
 
