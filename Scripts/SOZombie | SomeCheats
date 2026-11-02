@@ -1,0 +1,46 @@
+--[[
+Sorry for soo small script :<
+--]]
+local rs = game:GetService("ReplicatedStorage")
+local Rayfield = loadstring(game:HttpGet("https://github.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/raw/refs/heads/main/Rayfield/CustomRayfield.luau"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "SOZombie | SomeCheats",
+    LoadingTitle = "SOZombie | SomeCheats",
+    LoadingSubtitle = "By: UnknownSquad",
+    Theme = "Amethyst",
+    Width = 460,
+    Height = 360,
+    Font = "Code",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+local morphTab = Window:CreateTab("Morphs")
+
+local morphs = {}
+for _, v in ipairs(rs.Morphs:GetChildren()) do
+    if v:IsA("Model") then table.insert(morphs, v.Name) end
+end
+table.sort(morphs)
+
+local morphChoice = morphs[1]
+morphTab:CreateDropdown({
+    Name = "Select Morph",
+    Options = morphs,
+    CurrentOption = {morphs[1]},
+    MultipleOptions = false,
+    Callback = function(opt)
+        morphChoice = type(opt) == "table" and opt[1] or opt
+    end
+})
+
+morphTab:CreateButton({
+    Name = "Change Morph",
+    Callback = function()
+        local m = rs.Morphs:FindFirstChild(morphChoice)
+        if m then
+            rs.CharChange:FireServer(m)
+        end
+    end
+})
