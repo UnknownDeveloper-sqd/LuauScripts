@@ -1,0 +1,241 @@
+local Rayfield = loadstring(game:HttpGet("https://github.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/raw/refs/heads/main/Rayfield/CustomRayfield.luau"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "FSMorph 2 | SomeCheats",
+    LoadingTitle = "FSMorph 2 | SomeCheats",
+    LoadingSubtitle = "By: UnknownSquad",
+    Theme = "Amethyst",
+    Width = 460,
+    Height = 360,
+    Font = "Code",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+local lp = game.Players.LocalPlayer
+local sel = "sans"
+local auto = false
+local target = nil
+
+local charData = {
+    ["sans"] = {id = "sans"},
+    ["fell sans"] = {id = "fell sans0"},
+    ["outer sans"] = {id = "outer sans"},
+    ["swap sans"] = {id = "swap sans"},
+    ["dust sans"] = {id = "dust sans"},
+    ["science sans"] = {id = "science sans"},
+    ["horror sans"] = {id = "horror sans"},
+    ["killer sans"] = {id = "killer sans"},
+    ["geno sans"] = {id = "geno sans"},
+    ["photo sans"] = {id = "photo sans"},
+    ["steam sans"] = {id = "steam sans"},
+    ["2D sans"] = {id = "2D sans"},
+    ["insanity sans"] = {id = "insanity sans"},
+    ["negatale sans"] = {id = "negatale sans"},
+    ["bird sans"] = {id = "bird sans"},
+    ["hardmode sans"] = {id = "hardmode sans"},
+    ["last breath"] = {id = "last breath0"},
+    ["sudden changes"] = {id = "sudden changes0"},
+    ["king sans"] = {id = "king sans"},
+    ["negative sans"] = {id = "negative sans"},
+    ["limbo sans"] = {id = "limbo sans"},
+    ["fresh sans"] = {id = "fresh sans"},
+    ["delta sans"] = {id = "delta sans"},
+    ["tone sans"] = {id = "tone sans"},
+    ["ink sans"] = {id = "ink sans"},
+    ["error sans"] = {id = "error sans"},
+    ["toxin sans"] = {id = "toxin sans"},
+    ["epic sans"] = {id = "epic sans"},
+    ["ocean sans"] = {id = "ocean sans"},
+    ["reaper sans"] = {id = "reaper sans"},
+    ["neutral sans"] = {id = "neutral sans"},
+    ["boneliest sans"] = {id = "boneliest sans"},
+    ["tears in the rain"] = {id = "tears in the rain0"},
+    ["mafia sans"] = {id = "mafia sans"},
+    ["alter sans"] = {id = "alter sans"},
+    ["hard sans"] = {id = "hard sans"},
+    ["wiki sans"] = {id = "wiki sans"},
+    ["cross sans"] = {id = "cross sans"},
+    ["crossbones"] = {id = "crossbones"},
+    ["virus sans"] = {id = "virus sans"},
+    ["DustDust sans"] = {id = "dustdust"},
+    ["OuterFell sans"] = {id = "outerfell"},
+    ["OuterDust sans"] = {id = "outerdust"},
+    ["KillerDust sans"] = {id = "killerdust"},
+    ["2D Dust sans"] = {id = "2D dust"},
+    ["2D Swap sans"] = {id = "2D swap"},
+    ["2D Killer sans"] = {id = "2D killer"},
+    ["2D Hardmode sans"] = {id = "2D hardmode"},
+    ["2D Outer sans"] = {id = "2D outer"},
+    ["2D Last Breath sans"] = {id = "2D lastbreath"},
+    ["OuterOuter sans"] = {id = "outerouter"},
+    ["SwapSwap sans"] = {id = "swapswap"},
+    ["AfterDust sans"] = {id = "afterdust"},
+    ["DustDustDust sans"] = {id = "dustdustdust"},
+    ["SwapFell sans"] = {id = "swapfell"},
+    ["Distrust sans"] = {id = "distrust"},
+    ["DustFell sans"] = {id = "felldust"},
+    ["HorrorDust sans"] = {id = "horrordust"},
+    ["HorrorFell sans"] = {id = "horrorfell"},
+    ["Idutshane"] = {id = "idutshane"},
+    ["Papyrus"] = {id = "papyrus"},
+    ["Dodge Sans"] = {id = "dodgeSans"},
+    ["2D Hard sans"] = {id = "2D hardsans"},
+    ["2D VHS sans"] = {id = "2D VHS"},
+    ["Fun Dog"] = {id = "fun1"}
+}
+
+local opData = {
+    ["Error404"] = {id = "Error404", op = true},
+    ["Alpha sans"] = {id = "Alpha sans", op = true},
+    ["King Multiverse"] = {id = "King Multiverse", op = true},
+    ["M87"] = {id = "M870", op = true},
+    ["InkDust sans"] = {id = "inkdust", op = true},
+    ["ErrorDust sans"] = {id = "errordust", op = true},
+    ["Dusttrust v1"] = {id = "dusttrust1", op = true},
+    ["Dusttrust v2"] = {id = "dusttrust2", op = true}
+}
+
+local charList = {
+    "sans", "fell sans", "outer sans", "swap sans", "dust sans",
+    "science sans", "horror sans", "killer sans", "geno sans", "photo sans",
+    "steam sans", "2D sans", "insanity sans", "negatale sans", "bird sans",
+    "hardmode sans", "last breath", "sudden changes", "king sans", "negative sans",
+    "limbo sans", "fresh sans", "delta sans", "tone sans", "ink sans",
+    "error sans", "toxin sans", "epic sans", "ocean sans", "reaper sans",
+    "neutral sans", "boneliest sans", "tears in the rain", "mafia sans", "alter sans",
+    "hard sans", "wiki sans", "cross sans", "crossbones", "virus sans",
+    "DustDust sans", "OuterFell sans", "OuterDust sans", "KillerDust sans",
+    "2D Dust sans", "2D Swap sans", "2D Killer sans", "2D Hardmode sans",
+    "2D Outer sans", "2D Last Breath sans", "OuterOuter sans", "SwapSwap sans",
+    "AfterDust sans", "DustDustDust sans", "SwapFell sans", "Distrust sans",
+    "DustFell sans", "HorrorDust sans", "HorrorFell sans", "Idutshane",
+    "Papyrus", "Dodge Sans", "2D Hard sans", "VHS sans", "2D VHS sans", "Fun Dog"
+}
+
+local pg = lp:WaitForChild("PlayerGui")
+local pos = pg:WaitForChild("GuiThatShowsPosition")
+local opVal = pos:WaitForChild("Has404")
+
+local function addOpChars()
+    for name, data in pairs(opData) do
+        charData[name] = data
+        if not table.find(charList, name) then
+            table.insert(charList, name)
+        end
+    end
+end
+
+if opVal.Value == true then
+    addOpChars()
+end
+
+local Tab = Window:CreateTab("Main")
+
+local prog = Tab:CreateProgress({
+    Name = "Resets Progress",
+    Progress = 0
+})
+
+local function getResets()
+    local pgui = lp:FindFirstChild("PlayerGui")
+    local ppos = pgui and pgui:FindFirstChild("GuiThatShowsPosition")
+    if not ppos then return 0 end
+    if sel == "sans" and ppos:FindFirstChild("Resets404") then
+        return ppos.Resets404.Value
+    end
+    return ppos:FindFirstChild("Resets") and ppos.Resets.Value or 0
+end
+
+local function updateUI()
+    local cur = getResets()
+    local maxT = target or 202
+    local ratio = math.clamp(cur / maxT, 0, 1)
+    prog:Set(ratio)
+end
+
+updateUI()
+
+local Drop = Tab:CreateDropdown({
+    Name = "Select Character",
+    Options = charList,
+    CurrentOption = {"sans"},
+    MultiSelection = false,
+    Callback = function(opt)
+        sel = typeof(opt) == "table" and opt[1] or opt
+        updateUI()
+    end
+})
+
+opVal.Changed:Connect(function(v)
+    if v == true then
+        addOpChars()
+        if Drop and Drop.Refresh then
+            Drop:Refresh(charList)
+        end
+    end
+end)
+
+Tab:CreateInput({
+    Name = "Target Resets",
+    PlaceholderText = "0000",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(txt)
+        target = tonumber(txt)
+        updateUI()
+    end
+})
+
+Tab:CreateButton({
+    Name = "Morph",
+    Callback = function()
+        local pgui = lp:WaitForChild("PlayerGui")
+        local gui = pgui:WaitForChild("SelectCharacterGui")
+        local frame = gui:WaitForChild("Frame")
+        local ev = frame:WaitForChild("RemoteEvent")
+        local data = charData[sel] or {id = sel}
+        ev:FireServer(data.id, data.op and true or nil)
+    end
+})
+
+local Toggle
+
+local function loop()
+    while auto do
+        local cur = getResets()
+        updateUI()
+        if target and cur >= target then
+            auto = false
+            if Toggle and Toggle.Set then
+                Toggle:Set(false)
+            end
+            break
+        end
+        local pgui = lp:WaitForChild("PlayerGui")
+        local gui = pgui:WaitForChild("SelectCharacterGui")
+        local frame = gui:WaitForChild("Frame")
+        local ev = frame:WaitForChild("RemoteEvent")
+        local data = charData[sel] or {id = sel}
+        ev:FireServer(data.id, data.op and true or nil)
+        task.wait(1)
+        if not auto then break end
+        local char = lp.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health > 0 then
+            hum.Health = 0
+        end
+        lp.CharacterAdded:Wait()
+        updateUI()
+    end
+end
+
+Toggle = Tab:CreateToggle({
+    Name = "Auto Reset",
+    CurrentValue = false,
+    Callback = function(v)
+        auto = v
+        if auto then
+            task.spawn(loop)
+        end
+    end
+})
