@@ -1,4 +1,4 @@
-local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/refs/heads/main/Rayfield/CustomRayfield.luau"))()
+local Rayfield = loadstring(game:HttpGet("https://github.com/UnknownDeveloper-sqd/UnknownSquad-RayField-Lib/raw/refs/heads/main/Rayfield/CustomRayfield.luau"))()
 
 local Window = Rayfield:CreateWindow({
     Name = "FSMorph 2 | SomeCheats",
@@ -12,7 +12,7 @@ local Window = Rayfield:CreateWindow({
     KeySystem = false
 })
 
-local lp = game.Players.LocalPlayer
+local lp = game:GetService("Players").LocalPlayer
 local sel = "sans"
 local auto = false
 local target = nil
@@ -113,10 +113,6 @@ local charList = {
     "Papyrus", "Dodge Sans", "2D Hard sans", "VHS sans", "2D VHS sans", "Fun Dog"
 }
 
-local pg = lp:WaitForChild("PlayerGui")
-local pos = pg:WaitForChild("GuiThatShowsPosition")
-local opVal = pos:WaitForChild("Has404")
-
 local function addOpChars()
     for name, data in pairs(opData) do
         charData[name] = data
@@ -126,8 +122,26 @@ local function addOpChars()
     end
 end
 
-if opVal.Value == true then
+local Drop
+local pg = lp:FindFirstChild("PlayerGui") or lp:WaitForChild("PlayerGui", 5)
+local pos = pg and (pg:FindFirstChild("GuiThatShowsPosition") or pg:WaitForChild("GuiThatShowsPosition", 5))
+local opVal = pos and (pos:FindFirstChild("Has404") or pos:WaitForChild("Has404", 5))
+
+if opVal and opVal.Value == true then
     addOpChars()
+end
+
+if opVal then
+    opVal.Changed:Connect(function(v)
+        if v == true then
+            addOpChars()
+            if Drop and Drop.Refresh then
+                pcall(function()
+                    Drop:Refresh(charList)
+                end)
+            end
+        end
+    end)
 end
 
 local Tab = Window:CreateTab("Main")
@@ -138,94 +152,106 @@ local prog = Tab:CreateProgress({
 })
 
 local function getResets()
-    local pgui = lp:FindFirstChild("PlayerGui")
-    local ppos = pgui and pgui:FindFirstChild("GuiThatShowsPosition")
-    if not ppos then return 0 end
-    if sel == "sans" and ppos:FindFirstChild("Resets404") then
-        return ppos.Resets404.Value
-    end
-    return ppos:FindFirstChild("Resets") and ppos.Resets.Value or 0
+    local val = 0
+    pcall(function()
+        local pgui = lp:FindFirstChild("PlayerGui")
+        local ppos = pgui and pgui:FindFirstChild("GuiThatShowsPosition")
+        if not ppos then return end
+        if sel == "sans" and ppos:FindFirstChild("Resets404") then
+            val = ppos.Resets404.Value
+            return
+        end
+        local r = ppos:FindFirstChild("Resets")
+        if r then
+            val = r.Value
+        end
+    end)
+    return val
 end
 
 local function updateUI()
-    local cur = getResets()
-    local maxT = target or 202
-    local ratio = math.clamp(cur / maxT, 0, 1)
-    prog:Set(ratio)
+    pcall(function()
+        local cur = getResets()
+        local maxT = target or 202
+        local ratio = math.clamp(cur / maxT, 0, 1)
+        if prog and prog.Set then
+            prog:Set(ratio)
+        end
+    end)
 end
 
 updateUI()
 
-local Drop = Tab:CreateDropdown({
+Drop = Tab:CreateDropdown({
     Name = "Select Character",
     Options = charList,
     CurrentOption = {"sans"},
     MultiSelection = false,
     Callback = function(opt)
-        sel = typeof(opt) == "table" and opt[1] or opt
-        updateUI()
+        pcall(function()
+            sel = typeof(opt) == "table" and opt[1] or opt
+            updateUI()
+        end)
     end
 })
-
-opVal.Changed:Connect(function(v)
-    if v == true then
-        addOpChars()
-        if Drop and Drop.Refresh then
-            Drop:Refresh(charList)
-        end
-    end
-end)
 
 Tab:CreateInput({
     Name = "Target Resets",
     PlaceholderText = "0000",
     RemoveTextAfterFocusLost = false,
     Callback = function(txt)
-        target = tonumber(txt)
-        updateUI()
+        pcall(function()
+            target = tonumber(txt)
+            updateUI()
+        end)
     end
 })
 
+local function fireMorph()
+    pcall(function()
+        local pgui = lp:FindFirstChild("PlayerGui")
+        local gui = pgui and pgui:FindFirstChild("SelectCharacterGui")
+        local frame = gui and gui:FindFirstChild("Frame")
+        local ev = frame and frame:FindFirstChild("RemoteEvent")
+        if ev then
+            local data = charData[sel] or {id = sel}
+            ev:FireServer(data.id, data.op and true or nil)
+        end
+    end)
+end
+
 Tab:CreateButton({
     Name = "Morph",
-    Callback = function()
-        local pgui = lp:WaitForChild("PlayerGui")
-        local gui = pgui:WaitForChild("SelectCharacterGui")
-        local frame = gui:WaitForChild("Frame")
-        local ev = frame:WaitForChild("RemoteEvent")
-        local data = charData[sel] or {id = sel}
-        ev:FireServer(data.id, data.op and true or nil)
-    end
+    Callback = fireMorph
 })
 
 local Toggle
 
 local function loop()
     while auto do
-        local cur = getResets()
-        updateUI()
-        if target and cur >= target then
-            auto = false
-            if Toggle and Toggle.Set then
-                Toggle:Set(false)
+        pcall(function()
+            local cur = getResets()
+            updateUI()
+            if target and cur >= target then
+                auto = false
+                if Toggle and Toggle.Set then
+                    Toggle:Set(false)
+                end
+                return
             end
-            break
-        end
-        local pgui = lp:WaitForChild("PlayerGui")
-        local gui = pgui:WaitForChild("SelectCharacterGui")
-        local frame = gui:WaitForChild("Frame")
-        local ev = frame:WaitForChild("RemoteEvent")
-        local data = charData[sel] or {id = sel}
-        ev:FireServer(data.id, data.op and true or nil)
-        task.wait(1)
-        if not auto then break end
-        local char = lp.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum and hum.Health > 0 then
-            hum.Health = 0
-        end
-        lp.CharacterAdded:Wait()
-        updateUI()
+            fireMorph()
+            task.wait(1)
+            if not auto then return end
+            local char = lp.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                hum.Health = 0
+            end
+            lp.CharacterAdded:Wait()
+            task.wait(0.2)
+            updateUI()
+        end)
+        task.wait(0.1)
     end
 end
 
