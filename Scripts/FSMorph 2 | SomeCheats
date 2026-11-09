@@ -204,6 +204,18 @@ Tab:CreateInput({
     end
 })
 
+local function isMorphed(c)
+    local bp = lp:FindFirstChild("Backpack")
+    if bp and #bp:GetChildren() > 0 then return true end
+    if c then
+        if c:FindFirstChildOfClass("Tool") then return true end
+        if c:FindFirstChild("Headz") or c:FindFirstChild("Chest") or c:FindFirstChild("SansAnim") or c:FindFirstChild("KR") then
+            return true
+        end
+    end
+    return false
+end
+
 Tab:CreateButton({
     Name = "Morph",
     Callback = function()
@@ -234,22 +246,33 @@ local function loop()
                 end
                 return
             end
+            local char = lp.Character or lp.CharacterAdded:Wait()
+            local hum = char:WaitForChild("Humanoid", 10)
+            local root = char:WaitForChild("HumanoidRootPart", 10)
+            if not hum or hum.Health <= 0 then
+                lp.CharacterAdded:Wait()
+                return
+            end
+            task.wait(0.4)
             local pgui = lp:FindFirstChild("PlayerGui")
             local gui = pgui and pgui:FindFirstChild("SelectCharacterGui")
             local frame = gui and gui:FindFirstChild("Frame")
             local ev = frame and frame:FindFirstChild("RemoteEvent")
-            if ev then
-                local data = charData[sel] or {id = sel}
-                ev:FireServer(data.id, data.op and true or nil)
+            local t0 = os.clock()
+            while auto and not isMorphed(char) and os.clock() - t0 < 6 do
+                if ev then
+                    local data = charData[sel] or {id = sel}
+                    ev:FireServer(data.id, data.op and true or nil)
+                end
+                task.wait(0.3)
             end
-            task.wait(1)
             if not auto then return end
-            local char = lp.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            task.wait(0.4)
             if hum and hum.Health > 0 then
                 hum.Health = 0
             end
             lp.CharacterAdded:Wait()
+            task.wait(0.3)
             updateUI()
         end)
         task.wait(0.1)
